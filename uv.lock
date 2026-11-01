@@ -1044,7 +1044,7 @@ wheels = [
 [[package]]
 name = "musicset"
 version = "0.1.0"
-source = { git = "https://github.com/vibetuned/musicset?branch=main#715115f2508697f8a1339b02e2615c64b5f02af5" }
+source = { git = "https://github.com/vibetuned/musicset?branch=main#2c0738e6fa3da75761cd07d60dd3c5296e5f70ee" }
 dependencies = [
     { name = "cairosvg" },
     { name = "numpy" },
