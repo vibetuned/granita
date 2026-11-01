@@ -14,10 +14,11 @@ wheels/
 .ty_cache/
 .pytest_cache/
 
-# Data and Models
-data/
-checkpoints/
-runs/
+# Data and models at the repository root only (a bare `data/` would also hide the
+# Python package src/granita/data)
+/data/
+/checkpoints/
+/runs/
 *.onnx
 *.safetensors
 *.pt
