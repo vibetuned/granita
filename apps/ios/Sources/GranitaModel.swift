@@ -3,7 +3,7 @@ import Foundation
 
 /// The Core ML export (`granitanet.mlpackage`, compiled into the app), fed the way
 /// granita feeds PyTorch: `input` (1, 1, 32, 32) float32, the normalised pixels, and
-/// `context` (1, 9); `logits` (1, 61) out, softmax for the confidences.
+/// `context` (1, 16); `logits` (1, 51) out, softmax for the confidences.
 final class GranitaModel {
     struct Prediction {
         let logits: [Float]

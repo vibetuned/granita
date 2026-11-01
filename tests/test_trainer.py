@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from granita.config import TrainConfig
+from granita.config import CONTEXT_DIM, TrainConfig
 from granita.infer.predictor import GranitaClassifier
 from granita.train.ablation import format_ablation_report, run_ablation
 from granita.train.trainer import build_scheduler, run_training
@@ -33,9 +33,10 @@ def _tiny_archive(folder: Path) -> Path:
     xs, ys, ss = make(16)
 
     def ctx(y: np.ndarray) -> np.ndarray:  # class 1 sits above the staff, class 0 on it
-        c = np.zeros((len(y), 9), dtype=np.float32)
+        c = np.zeros((len(y), CONTEXT_DIM), dtype=np.float32)
         c[:, 0] = 1.0
-        c[:, 1] = np.where(y == 1, -0.8, 0.0)
+        c[:, 2] = np.where(y == 1, 1.0, 0.0)  # class 1 sits above the staff
+        c[:, 1] = np.where(y == 1, 0.0, 1.0)
         return c
 
     np.savez(
@@ -79,7 +80,7 @@ def test_run_training_and_ablation(tmp_path: Path) -> None:
         batch_size=16,
         epochs=2,
         warmup_epochs=1,
-        context_dim=9,
+        context_dim=CONTEXT_DIM,
         num_workers=0,
         device="cpu",
     )
@@ -97,7 +98,8 @@ def test_run_training_and_ablation(tmp_path: Path) -> None:
     assert "optimizer_state_dict" not in best_ckpt and "optimizer_state_dict" in last_ckpt
     assert best_ckpt["classes"] == ["articTenutoAbove", "fing1"]
     assert best_ckpt["config"]["warmup_epochs"] == 1
-    assert best_ckpt["context_dim"] == 9 and best_ckpt["context_features"][0] == "valid"
+    assert best_ckpt["context_dim"] == CONTEXT_DIM
+    assert best_ckpt["context_features"][0] == "valid"
     assert history[0]["val_top1_noctx"] is not None
 
     from safetensors import safe_open
@@ -108,7 +110,7 @@ def test_run_training_and_ablation(tmp_path: Path) -> None:
     assert json.loads(meta["classes"]) == best_ckpt["classes"]
 
     clf = GranitaClassifier.from_checkpoint(best, device="cpu")
-    assert clf.context_dim == 9
+    assert clf.context_dim == CONTEXT_DIM
     assert clf.predict(np.full((32, 32), 255, dtype=np.uint8)).label in clf.classes
 
     abl_cfg = TrainConfig(

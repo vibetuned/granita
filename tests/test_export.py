@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 import torch
 
+from granita.config import CONTEXT_DIM
 from granita.models.backbone import create_model
 from granita.models.export import (
     export_coreml,
@@ -50,9 +51,9 @@ def test_export_with_context_input(tmp_path: Path) -> None:
     from granita.models.backbone import GranitaNet
     from granita.models.export import write_sidecar
 
-    model = GranitaNet(num_classes=4, context_dim=9).eval()
+    model = GranitaNet(num_classes=4, context_dim=CONTEXT_DIM).eval()
     program = torch.export.load(str(export_pt2(model, tmp_path / "ctx.pt2"))).module()
-    x, ctx = torch.randn(3, 1, 32, 32), torch.randn(3, 9)
+    x, ctx = torch.randn(3, 1, 32, 32), torch.randn(3, CONTEXT_DIM)
     with torch.no_grad():
         assert torch.allclose(program(x, ctx), model(x, ctx), atol=1e-5)
     ort = pytest.importorskip("onnxruntime")
@@ -62,7 +63,7 @@ def test_export_with_context_input(tmp_path: Path) -> None:
     (got,) = session.run(None, {"input": x.numpy(), "context": ctx.numpy()})
     with torch.no_grad():
         np.testing.assert_allclose(got, model(x, ctx).numpy(), atol=1e-4, rtol=1e-3)
-    sidecar = write_sidecar(out_file, ["a", "b", "c", "d"], "granitanet", context_dim=9)
+    sidecar = write_sidecar(out_file, ["a", "b", "c", "d"], "granitanet", context_dim=CONTEXT_DIM)
     import json
 
     meta = json.loads(sidecar.read_text())
@@ -136,7 +137,7 @@ def test_export_mobile_with_context_input(tmp_path: Path) -> None:
     litert_interp = pytest.importorskip("ai_edge_litert.interpreter")
     from granita.models.backbone import GranitaNet
 
-    model = GranitaNet(num_classes=4, context_dim=9).eval()
+    model = GranitaNet(num_classes=4, context_dim=CONTEXT_DIM).eval()
 
     # Core ML with context
     coreml_dir = export_coreml(model, tmp_path / "ctx")
@@ -149,7 +150,7 @@ def test_export_mobile_with_context_input(tmp_path: Path) -> None:
     tflite_file = export_litert(model, tmp_path / "ctx.tflite")
     interp = litert_interp.Interpreter(model_path=str(tflite_file))
     interp.allocate_tensors()
-    x, ctx = torch.randn(1, 1, 32, 32), torch.randn(1, 9)
+    x, ctx = torch.randn(1, 1, 32, 32), torch.randn(1, CONTEXT_DIM)
     for detail in interp.get_input_details():
         shape = tuple(detail["shape"])
         if len(shape) == 4:

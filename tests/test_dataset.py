@@ -8,6 +8,7 @@ import pytest
 import torch
 from PIL import Image
 
+from granita.config import CONTEXT_DIM
 from granita.data.dataset import (
     SymbolFolderDataset,
     SymbolNpzDataset,
@@ -34,7 +35,7 @@ def test_symbol_npz_dataset() -> None:
 
     assert len(dataset) == 10
     img, context, label = dataset[0]
-    assert img.shape == (1, 32, 32) and context.shape == (9,)
+    assert img.shape == (1, 32, 32) and context.shape == (CONTEXT_DIM,)
     assert isinstance(label, int)
     assert label == 0
     assert dataset.sources is None
@@ -92,18 +93,20 @@ def test_load_npz_splits_with_sources(tmp_path: Path) -> None:
     assert val_ds.sources.tolist() == [0, 1, 2, 0, 1, 2]
     images, contexts, labels = next(iter(train))
     assert images.shape == (4, 1, 32, 32) and labels.shape == (4,)
-    assert contexts.shape == (4, 9) and float(contexts.abs().sum()) == 0.0  # no c_* arrays
+    assert contexts.shape == (4, CONTEXT_DIM) and float(contexts.abs().sum()) == 0.0
 
 
 def test_load_npz_with_contexts(tmp_path: Path) -> None:
     npz = _write_npz(tmp_path / "npz", with_sources=True)
     data = dict(np.load(npz))
-    data["c_val"] = np.tile(np.arange(9, dtype=np.float32), (6, 1))
+    data["c_val"] = np.tile(np.arange(CONTEXT_DIM, dtype=np.float32), (6, 1))
     np.savez(npz, **data)
     val = load_split_dataset(npz, "val")
-    assert val is not None and val.contexts is not None and val.contexts.shape == (6, 9)
+    assert val is not None and val.contexts is not None
+    assert val.contexts.shape == (6, CONTEXT_DIM)
     image, context, label = val[2]
-    assert image.shape == (1, 32, 32) and context.tolist() == list(range(9)) and label == 2
+    assert image.shape == (1, 32, 32) and label == 2
+    assert context.tolist() == list(range(CONTEXT_DIM))
     with pytest.raises(ValueError, match="contexts must be"):
         SymbolNpzDataset(_glyphs(3), np.zeros(3, dtype=np.int64), ["a"], contexts=np.zeros((3, 4)))
 
@@ -138,7 +141,7 @@ def test_load_image_folder(tmp_path: Path) -> None:
     loader = make_loader(ds, batch_size=8, shuffle=False, num_workers=0)
     images, contexts, labels = next(iter(loader))
     assert images.shape == (8, 1, 32, 32) and labels.tolist() == [0, 0, 0, 0, 1, 1, 1, 1]
-    assert contexts.shape == (8, 9)
+    assert contexts.shape == (8, CONTEXT_DIM)
 
 
 def test_missing_path_raises(tmp_path: Path) -> None:

@@ -3,7 +3,7 @@
 import pytest
 import torch
 
-from granita.config import DEFAULT_CLASSES
+from granita.config import CONTEXT_DIM, DEFAULT_CLASSES
 from granita.models.backbone import (
     AVAILABLE_MODELS,
     GranitaNet,
@@ -81,21 +81,21 @@ def test_create_all_available_models(model_name: str) -> None:
 
 def test_granitanet_context_input() -> None:
     torch.manual_seed(0)
-    model = GranitaNet(num_classes=5, in_channels=1, context_dim=9).eval()
+    model = GranitaNet(num_classes=5, in_channels=1, context_dim=CONTEXT_DIM).eval()
     x = torch.randn(3, 1, 32, 32)
-    ctx = torch.zeros(3, 9)
+    ctx = torch.zeros(3, CONTEXT_DIM)
     ctx[:, 0] = 1.0
     ctx[:, 1] = torch.tensor([-0.5, 0.0, 0.5])
     with torch.no_grad():
         plain = model(x)
-        zeros = model(x, torch.zeros(3, 9))
+        zeros = model(x, torch.zeros(3, CONTEXT_DIM))
         with_ctx = model(x, ctx)
     assert plain.shape == (3, 5) and torch.allclose(plain, zeros)  # no context == zero context
     assert not torch.allclose(with_ctx, zeros)
-    assert model.context_dim == 9 and GranitaNet(num_classes=5).context_dim == 0
+    assert model.context_dim == CONTEXT_DIM and GranitaNet(num_classes=5).context_dim == 0
     # the other families accept and ignore the argument
     for name in ("tiny", "regla", "iformer", "lsnet"):
-        m = create_model(name, num_classes=5, context_dim=9).eval()
+        m = create_model(name, num_classes=5, context_dim=CONTEXT_DIM).eval()
         with torch.no_grad():
             assert torch.allclose(m(x), m(x, ctx))
 

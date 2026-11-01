@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import torch
@@ -47,7 +47,9 @@ class SymbolNpzDataset(Dataset[Item]):
         if sources is not None and len(sources) != len(labels):
             raise ValueError(f"Mismatch: {len(sources)} sources vs {len(labels)} labels")
         if contexts is not None and contexts.shape != (len(labels), CONTEXT_DIM):
-            raise ValueError(f"contexts must be ({len(labels)}, {CONTEXT_DIM}), got {contexts.shape}")
+            raise ValueError(
+                f"contexts must be ({len(labels)}, {CONTEXT_DIM}), got {contexts.shape}"
+            )
 
         self.images = images
         self.labels = labels.astype(np.int64)
@@ -59,8 +61,8 @@ class SymbolNpzDataset(Dataset[Item]):
     def __len__(self) -> int:
         return len(self.images)
 
-    def __getitem__(self, idx: int) -> Item:
-        img_np = self.images[idx]
+    def __getitem__(self, index: int) -> Item:
+        img_np = self.images[index]
         if img_np.ndim == 2:
             # (H, W) -> (1, H, W)
             img_tensor = torch.from_numpy(img_np).unsqueeze(0)
@@ -70,13 +72,15 @@ class SymbolNpzDataset(Dataset[Item]):
             # (H, W, C) -> (C, H, W)
             img_tensor = torch.from_numpy(img_np).permute(2, 0, 1)
 
-        label = int(self.labels[idx])
+        label = int(self.labels[index])
 
         if self.transform is not None:
             img_tensor = self.transform(img_tensor)
 
         context = (
-            torch.zeros(CONTEXT_DIM) if self.contexts is None else torch.from_numpy(self.contexts[idx])
+            torch.zeros(CONTEXT_DIM)
+            if self.contexts is None
+            else torch.from_numpy(self.contexts[index])
         )
         return img_tensor, context, label
 
@@ -113,8 +117,8 @@ class SymbolFolderDataset(Dataset[Item]):
     def __len__(self) -> int:
         return len(self.samples)
 
-    def __getitem__(self, idx: int) -> Item:
-        img_path, label = self.samples[idx]
+    def __getitem__(self, index: int) -> Item:
+        img_path, label = self.samples[index]
         with Image.open(img_path) as pil_img:
             gray = pil_img.convert("L")
             img_arr = np.array(gray, dtype=np.uint8)
@@ -126,7 +130,7 @@ class SymbolFolderDataset(Dataset[Item]):
         return img_tensor, torch.zeros(CONTEXT_DIM), label
 
 
-def read_labels_json(data_path: Path) -> dict[str, object]:
+def read_labels_json(data_path: Path) -> dict[str, Any]:
     """``labels.json`` written next to a ``musicset symbols`` build, or ``{}``."""
     folder = data_path if data_path.is_dir() else data_path.parent
     labels_json = folder / "labels.json"
@@ -136,7 +140,7 @@ def read_labels_json(data_path: Path) -> dict[str, object]:
         return json.load(f)
 
 
-def _paper_level(meta: dict[str, object]) -> int:
+def _paper_level(meta: dict[str, Any]) -> int:
     return 0 if meta.get("invert") else PAPER
 
 
@@ -165,8 +169,8 @@ def load_split_dataset(
             classes = (
                 [str(c) for c in data["classes"]] if "classes" in data else list(DEFAULT_CLASSES)
             )
-            sources = data[f"s_{split}"] if f"s_{split}" in data else None
-            contexts = data[f"c_{split}"] if f"c_{split}" in data else None
+            sources = data.get(f"s_{split}")
+            contexts = data.get(f"c_{split}")
             return SymbolNpzDataset(
                 data[f"x_{split}"],
                 data[f"y_{split}"],

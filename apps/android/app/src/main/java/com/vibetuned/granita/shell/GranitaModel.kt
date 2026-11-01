@@ -7,8 +7,8 @@ import kotlin.math.exp
 
 /**
  * The LiteRT export (granitanet.tflite, an asset), fed the way granita feeds PyTorch:
- * the normalised pixels (1 x 1 x 32 x 32) and the context (1 x 9) in, the logits
- * (1 x 61) out, softmax for the confidences. The tflite keeps litert-torch's names, not
+ * the normalised pixels (1 x 1 x 32 x 32) and the context (1 x 16) in, the logits
+ * (1 x 51) out, softmax for the confidences. The tflite keeps litert-torch's names, not
  * the sidecar's: signature `serving_default`, inputs `args_0` (the image) and `args_1`
  * (the context), output `output_0`. LiteRT's CompiledModel API, on the CPU.
  */

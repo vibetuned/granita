@@ -51,26 +51,23 @@
     "gClef",
     "fClef",
     "cClef",
-    "timeSigCommon",
-    "timeSigCutCommon",
-    "timeSig2over2",
-    "timeSig2over4",
-    "timeSig3over4",
-    "timeSig3over8",
-    "timeSig4over4",
-    "timeSig6over8",
-    "timeSig9over8",
-    "timeSig12over8",
     "barlineSingle"
   ],
   "context": {
     "input": "context",
     "features": [
       "valid",
+      "in_staff",
+      "above_staff",
+      "below_staff",
       "y_staff",
       "x_measure",
       "barline",
       "has_note",
+      "note_above",
+      "note_below",
+      "note_left",
+      "note_right",
       "note_dx",
       "note_dy",
       "width",
@@ -130,16 +127,6 @@
     "gClef": "clef",
     "fClef": "clef",
     "cClef": "clef",
-    "timeSigCommon": "timesig",
-    "timeSigCutCommon": "timesig",
-    "timeSig2over2": "timesig",
-    "timeSig2over4": "timesig",
-    "timeSig3over4": "timesig",
-    "timeSig3over8": "timesig",
-    "timeSig4over4": "timesig",
-    "timeSig6over8": "timesig",
-    "timeSig9over8": "timesig",
-    "timeSig12over8": "timesig",
     "barlineSingle": "barline"
   },
   "input": {
@@ -160,7 +147,7 @@
     "name": "logits",
     "shape": [
       1,
-      61
+      51
     ],
     "softmax": "apply for confidences"
   },
@@ -174,7 +161,7 @@
     "centre": "bounding-box centre at the canvas centre, aspect preserved",
     "downsample": "bilinear to size_px"
   },
-  "checkpoint": "/home/flux/projects/granita/checkpoints/granitanet_v6_ctx/best_model.pt",
+  "checkpoint": "checkpoints/granitanet_v7_ctx/best_model.pt",
   "formats": [
     "coreml",
     "litert",

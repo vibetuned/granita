@@ -8,7 +8,7 @@ model (Core ML, LiteRT) against the reference:
 
 Each fixture carries the strokes in page pixels, the staff they were drawn on
 (staff space, middle line, barlines), the context the shells derive from them
-(raw facts and the 9-float vector), the 32 x 32 image ``render_strokes`` makes
+(raw facts and the 16-float vector), the 32 x 32 image ``render_strokes`` makes
 (uniform pen, natural size from the staff space) and the checkpoint's logits,
 with and without the context. The shapes are polylines, not handwriting: the
 fixtures pin numbers, not accuracy, and ``drawn_as`` is only what was meant.

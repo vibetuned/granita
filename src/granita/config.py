@@ -59,16 +59,6 @@ DEFAULT_CLASSES: Final[tuple[str, ...]] = (
     "gClef",
     "fClef",
     "cClef",
-    "timeSigCommon",
-    "timeSigCutCommon",
-    "timeSig2over2",
-    "timeSig2over4",
-    "timeSig3over4",
-    "timeSig3over8",
-    "timeSig4over4",
-    "timeSig6over8",
-    "timeSig9over8",
-    "timeSig12over8",
     "barlineSingle",
 )
 
@@ -126,16 +116,6 @@ CLASS_GROUPS: Final[dict[str, str]] = {
     "gClef": "clef",
     "fClef": "clef",
     "cClef": "clef",
-    "timeSigCommon": "timesig",
-    "timeSigCutCommon": "timesig",
-    "timeSig2over2": "timesig",
-    "timeSig2over4": "timesig",
-    "timeSig3over4": "timesig",
-    "timeSig3over8": "timesig",
-    "timeSig4over4": "timesig",
-    "timeSig6over8": "timesig",
-    "timeSig9over8": "timesig",
-    "timeSig12over8": "timesig",
     "barlineSingle": "barline",
 }
 
@@ -147,10 +127,17 @@ PAPER: Final[int] = 255
 # Conditioning vector: where the symbol sits in the score, mirrored from musicset.context
 CONTEXT_FEATURES: Final[tuple[str, ...]] = (
     "valid",
+    "in_staff",
+    "above_staff",
+    "below_staff",
     "y_staff",
     "x_measure",
     "barline",
     "has_note",
+    "note_above",
+    "note_below",
+    "note_left",
+    "note_right",
     "note_dx",
     "note_dy",
     "width",
@@ -159,9 +146,10 @@ CONTEXT_FEATURES: Final[tuple[str, ...]] = (
 CONTEXT_DIM: Final[int] = len(CONTEXT_FEATURES)
 
 # Sample provenance codes written by ``musicset symbols`` as ``s_<split>`` in dataset.npz
-SOURCE_NAMES: Final[tuple[str, ...]] = ("font", "stroke", "crop", "hand")
+SOURCE_NAMES: Final[tuple[str, ...]] = ("font", "stroke", "crop", "hand", "emnist")
 """``font``: SMuFL glyph render, ``stroke``: stylus stroke template, ``crop``: real score
-crop, ``hand``: real pen strokes (HOMUS writers, never shared between splits)."""
+crop, ``hand``: real pen strokes (HOMUS writers, never shared between splits), ``emnist``:
+real handwritten digits and letters (EMNIST) composed into fingerings and dynamics."""
 
 
 @dataclass

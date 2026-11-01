@@ -8,6 +8,7 @@ import pytest
 import torch
 from PIL import Image
 
+from granita.config import CONTEXT_DIM
 from granita.infer.predictor import (
     GranitaClassifier,
     crop_glyph,
@@ -155,9 +156,9 @@ def test_predict_with_context() -> None:
     from granita.context import SymbolContext, context_from_strokes, context_vector
 
     torch.manual_seed(0)
-    model = GranitaNet(num_classes=3, in_channels=1, context_dim=9)
+    model = GranitaNet(num_classes=3, in_channels=1, context_dim=CONTEXT_DIM)
     clf = GranitaClassifier(model=model, classes=["a", "b", "c"], device="cpu")
-    assert clf.context_dim == 9
+    assert clf.context_dim == CONTEXT_DIM
     img = np.full((32, 32), 255, dtype=np.uint8)
     img[8:24, 14:18] = 0
     ctx = SymbolContext(

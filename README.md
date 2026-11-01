@@ -4,7 +4,7 @@ A lightweight, high-performance music symbol and glyph classifier for score edit
 
 Granita's first job is **handwriting recognition in the [Battuta](https://battuta.vibetuned.com/) editor**: the user draws a symbol with a stylus, the strokes are rasterised exactly like the training data (`GranitaClassifier.predict_strokes`), and the predicted class is pushed back to the editor, which inserts it into the score. A **conditioning vector** describes *where* in the score the stroke was drawn (staff position, place in the measure, nearest notehead, size, all in staff spaces; `granita.context` mirrors `musicset.context`), so the same pen mark can mean different things in different places: a dot beside a notehead is an augmentation dot, above it a staccato. Train with `--context`; the model still works when the editor sends none.
 
-It also serves as a second stage for an OMR detector: `GranitaClassifier.predict_box` classifies the glyph inside a detection box with the same crop protocol [musicset](https://github.com/vibetuned/musicset) uses to build the training crops, for example to resolve a single `fing` box into `fing1`..`fing5`. It classifies 61 musical symbols: fingerings, ornaments, articulations, accidentals, dynamics and pedal marks, plus notes by duration, rests, clefs, time signatures, barlines and augmentation dots (the classes of the HOMUS handwritten dataset).
+It also serves as a second stage for an OMR detector: `GranitaClassifier.predict_box` classifies the glyph inside a detection box with the same crop protocol [musicset](https://github.com/vibetuned/musicset) uses to build the training crops, for example to resolve a single `fing` box into `fing1`..`fing5`. It classifies 51 musical symbols: fingerings, ornaments, articulations, accidentals, dynamics and pedal marks, plus notes by duration, rests, clefs, barlines and augmentation dots. Time signatures are deliberately left out: stacked digits confused every other class, fingerings above all.
 
 ---
 
@@ -21,7 +21,7 @@ Granita includes five distinct model families tailored for $32 \times 32$ single
 | **`tiny`** | `tiny` | Ultra-compact 3-stage CNN (~80k parameters) for microsecond latency in interactive editing tools. |
 
 - **Astral Toolchain**: Built with the classic `uv`, `ruff`, and `ty` toolchain.
-- **OMR Semantic Grouping**: Tracks and reports metrics across 11 musical categories (61 classes):
+- **OMR Semantic Grouping**: Tracks and reports metrics across 10 musical categories (51 classes):
   - **Fingering**: `fing1`, `fing2`, `fing3`, `fing4`, `fing5`
   - **Ornament**: `trill`, `mordent`, `turn`, `fermata`, `arpeg`
   - **Articulation**: `articStaccatoAbove`, `articTenutoAbove`, `articAccentAbove`, `articStaccatissimoAbove`, `articMarcatoAbove`
@@ -31,10 +31,9 @@ Granita includes five distinct model families tailored for $32 \times 32$ single
   - **Note**: `noteWhole`, `noteHalf`, `noteQuarter`, `note8th`, `note16th`, `note32nd`, `note64th`, `augmentationDot`
   - **Rest**: `restWholeHalf`, `restQuarter`, `rest8th`, `rest16th`, `rest32nd`, `rest64th`
   - **Clef**: `gClef`, `fClef`, `cClef`
-  - **Time Signature**: `timeSigCommon`, `timeSigCutCommon`, `timeSig2over2`, `timeSig2over4`, `timeSig3over4`, `timeSig3over8`, `timeSig4over4`, `timeSig6over8`, `timeSig9over8`, `timeSig12over8`
   - **Barline**: `barlineSingle`
 - **Data Integrations**: Natively loads the compressed `.npz` archives that `musicset symbols` writes (`dataset.npz` next to `labels.json`) and standard `ImageFolder` directory hierarchies.
-- **Per-source metrics**: `musicset symbols` tags every sample as `font` (SMuFL glyph render), `stroke` (stylus stroke template), `crop` (real score crop) or `hand` (real pen strokes from HOMUS, whose 100 writers never straddle splits); training logs, `eval` and the ablation report break accuracy down by source, so the **hand** column on the test split is a writer-held-out handwriting number and **stroke** the synthetic one.
+- **Per-source metrics**: `musicset symbols` tags every sample as `font` (SMuFL glyph render), `stroke` (stylus stroke template), `crop` (real score crop), `hand` (real pen strokes from HOMUS, whose 100 writers never straddle splits) or `emnist` (real handwritten digits and letters composed into fingerings and dynamics, EMNIST's test writers held out); training logs, `eval` and the ablation report break accuracy down by source, so the **hand** column on the test split is a writer-held-out handwriting number and **stroke** the synthetic one.
 - **Export Ready**: Export any model family to ONNX (ONNX Runtime, browsers), Apple Core ML (`.mlpackage`), Google LiteRT (`.tflite`), `torch.export` (`.pt2`) or TorchScript (deprecated upstream).
 
 ---
@@ -78,7 +77,7 @@ uv run granita info
 ```
 
 ### 2. Building the dataset
-`musicset symbols` (from the `data` extra) synthesises SMuFL glyphs and stylus stroke templates, crops real symbols from built musicset score datasets, and mixes in real pen strokes from the HOMUS dataset (Calvo-Zaragoza & Oncina, 2014; 15,200 symbols drawn on a tablet by 100 writers, which you download separately). Crops are split **by score** and HOMUS by writer, byte-identical images are kept in one split only, and every sample carries its source and its conditioning vector.
+`musicset symbols` (from the `data` extra) synthesises SMuFL glyphs and stylus stroke templates, crops real symbols from built musicset score datasets, and mixes in real handwriting: pen strokes from the HOMUS dataset (Calvo-Zaragoza & Oncina, 2014; 15,200 symbols drawn on a tablet by 100 writers) and, since HOMUS has no fingerings or dynamics, digits and letters from EMNIST (Cohen et al., 2017, the `byclass` split) composed into `3`, `mp`, `sfz`, ... Both are downloaded separately. Crops are split **by score**, HOMUS by writer and EMNIST by its own train/test writers, byte-identical images are kept in one split only, and every sample carries its source and its conditioning vector.
 ```bash
 # synthetic symbols + real crops from one or more built musicset datasets
 uv run musicset symbols data/symbols -n 2000 \
@@ -87,6 +86,9 @@ uv run musicset symbols data/symbols -n 2000 \
 
 # add the HOMUS pen strokes (writer-disjoint split, training samples rendered twice with tablet augmentation)
 uv run musicset symbols data/symbols -n 2000 --homus path/to/HOMUS.zip --homus-copies 2 --workers 8
+
+# add EMNIST handwriting for the fingerings and dynamics (1,000 words per class for train + val)
+uv run musicset symbols data/symbols -n 2000 --homus path/to/HOMUS.zip --emnist path/to/emnist --emnist-per-class 1000
 
 # contributions from your own editor (JSON Lines, see the musicset README), split by contributor
 uv run musicset symbols data/symbols -n 2000 --homus path/to/HOMUS.zip --strokes path/to/contributions.jsonl
@@ -193,7 +195,7 @@ from granita import GranitaClassifier, create_model
 from granita.context import context_from_strokes
 
 # Instantiate any model architecture for custom pipelines
-model = create_model("granitanet", num_classes=61, context_dim=9)
+model = create_model("granitanet", num_classes=51, context_dim=16)
 
 # Or load a trained classifier from a checkpoint
 classifier = GranitaClassifier.from_checkpoint("models/granitanet/best_model.pt")

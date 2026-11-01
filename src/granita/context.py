@@ -18,6 +18,12 @@ from granita.config import CONTEXT_DIM, CONTEXT_FEATURES
 
 NOTE_RANGE = 8.0
 """Staff spaces within which a notehead counts as the symbol's neighbour."""
+STAFF_HALF_HEIGHT = 2.0
+"""Staff spaces from the middle line to the outer lines: the ``in_staff`` zone."""
+NOTE_SIDE = 0.5
+"""Offset in staff spaces beyond which the symbol counts as beside, above or below the note."""
+NOTE_COLUMN = 1.0
+"""Horizontal offset within which the symbol counts as in the note's column."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,19 +44,29 @@ class SymbolContext:
 
 
 def context_vector(ctx: SymbolContext | None) -> np.ndarray:
-    """``CONTEXT_DIM`` float32 features for ``ctx``; all zero when ``None``."""
+    """``CONTEXT_DIM`` float32 features for ``ctx`` (see ``CONTEXT_FEATURES``); all zero
+    when ``None``. Flags: the staff zone (in / above / below the lines) and where the
+    nearest notehead is (symbol above / below / left / right of it)."""
     if ctx is None:
         return np.zeros(CONTEXT_DIM, dtype=np.float32)
     has_note = ctx.note_dx is not None and ctx.note_dy is not None
     dx = ctx.note_dx if ctx.note_dx is not None else 0.0
     dy = ctx.note_dy if ctx.note_dy is not None else 0.0
+    in_column = has_note and abs(dx) < NOTE_COLUMN
     return np.array(
         [
             1.0,
+            1.0 if abs(ctx.y_staff) <= STAFF_HALF_HEIGHT else 0.0,
+            1.0 if ctx.y_staff < -STAFF_HALF_HEIGHT else 0.0,
+            1.0 if ctx.y_staff > STAFF_HALF_HEIGHT else 0.0,
             max(-2.0, min(2.0, ctx.y_staff / 6.0)),
             max(-1.0, min(1.0, ctx.x_measure * 2.0 - 1.0)),
             max(0.0, min(1.0, ctx.barline / 8.0)),
             1.0 if has_note else 0.0,
+            1.0 if in_column and dy <= -NOTE_SIDE else 0.0,
+            1.0 if in_column and dy >= NOTE_SIDE else 0.0,
+            1.0 if has_note and dx <= -NOTE_SIDE else 0.0,
+            1.0 if has_note and dx >= NOTE_SIDE else 0.0,
             max(-1.0, min(1.0, dx / NOTE_RANGE)),
             max(-1.0, min(1.0, dy / NOTE_RANGE)),
             max(0.0, min(1.5, ctx.width / 8.0)),
@@ -111,7 +127,10 @@ def context_from_mapping(raw: Mapping[str, Any]) -> SymbolContext:
 __all__ = [
     "CONTEXT_DIM",
     "CONTEXT_FEATURES",
+    "NOTE_COLUMN",
     "NOTE_RANGE",
+    "NOTE_SIDE",
+    "STAFF_HALF_HEIGHT",
     "SymbolContext",
     "context_from_mapping",
     "context_from_strokes",
