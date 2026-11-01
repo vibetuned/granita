@@ -2,15 +2,17 @@
 
 from pathlib import Path
 
+import pytest
 import torch
 
-from granita.models.backbone import GranitaNet
+from granita.models.backbone import create_model
 from granita.models.export import export_torchscript
 
 
-def test_export_torchscript(tmp_path: Path) -> None:
-    model = GranitaNet(num_classes=10, in_channels=1)
-    out_file = tmp_path / "model.pt"
+@pytest.mark.parametrize("model_name", ["tiny", "granitanet", "regla", "iformer", "lsnet"])
+def test_export_torchscript_all_families(tmp_path: Path, model_name: str) -> None:
+    model = create_model(model_name, num_classes=10, in_channels=1)
+    out_file = tmp_path / f"{model_name}.pt"
 
     export_torchscript(model, out_file)
     assert out_file.is_file()

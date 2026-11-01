@@ -14,7 +14,7 @@ import torch.nn as nn
 from granita.config import TrainConfig
 from granita.data.dataset import load_dataset_from_path
 from granita.eval.evaluate import evaluate_model
-from granita.models.backbone import create_model
+from granita.models.backbone import AVAILABLE_MODELS, create_model
 
 if TYPE_CHECKING:
     from torch.utils.data import DataLoader
@@ -175,7 +175,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Train a Granita music glyph classifier")
     parser.add_argument("--data", type=str, default="data/symbols/dataset.npz", help="Dataset path")
     parser.add_argument("--output-dir", type=str, default="checkpoints", help="Output directory")
-    parser.add_argument("--model", type=str, default="granitanet", choices=["granitanet", "tiny"])
+    parser.add_argument(
+        "--model",
+        type=str,
+        default="granitanet",
+        choices=list(AVAILABLE_MODELS),
+    )
     parser.add_argument("--batch-size", type=int, default=128)
     parser.add_argument("--epochs", type=int, default=25)
     parser.add_argument("--lr", type=float, default=1e-3)

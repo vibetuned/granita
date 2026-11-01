@@ -12,22 +12,48 @@ from granita.config import CLASS_GROUPS, DEFAULT_CLASSES, TrainConfig
 from granita.data.dataset import load_dataset_from_path
 from granita.eval.evaluate import evaluate_model, format_metrics_table
 from granita.infer.predictor import GranitaClassifier
-from granita.models.backbone import create_model
+from granita.models.backbone import (
+    AVAILABLE_MODELS,
+    MODEL_DESCRIPTIONS,
+    count_parameters,
+    create_model,
+)
 from granita.models.export import export_onnx, export_torchscript
+from granita.train.ablation import DEFAULT_ABLATION_MODELS, run_ablation
 from granita.train.trainer import run_training
 
 
 def cmd_info(_: argparse.Namespace) -> None:
-    """Show information about Granita configuration, supported classes, and hardware."""
-    print("=" * 60)
+    """Show information about Granita configuration, models, supported classes, and hardware."""
+    print("=" * 68)
     print(" Granita: Music Glyph Recognition System")
-    print("=" * 60)
+    print("=" * 68)
     print(f"CUDA Available: {torch.cuda.is_available()}")
     if torch.cuda.is_available():
         vram_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
         print(f"Device Name:    {torch.cuda.get_device_name(0)}")
         print(f"VRAM:           {vram_gb:.2f} GB")
     print(f"Total Classes:  {len(DEFAULT_CLASSES)}")
+
+    # Models breakdown
+    model_rows = []
+    for name in (
+        "tiny",
+        "granitanet",
+        "regla_t",
+        "regla_s",
+        "iformer_t",
+        "iformer_s",
+        "lsnet_t",
+        "lsnet_s",
+    ):
+        m = create_model(name, num_classes=len(DEFAULT_CLASSES))
+        params = count_parameters(m)
+        desc = MODEL_DESCRIPTIONS.get(name, "")
+        model_rows.append([name, f"{params:,}", desc])
+
+    print("\nAvailable Model Backbones (for Training & Ablation):")
+    print(tabulate(model_rows, headers=["Model", "Parameters", "Description"], tablefmt="github"))
 
     # Groups breakdown
     groups: dict[str, list[str]] = {}
@@ -57,6 +83,22 @@ def cmd_train(args: argparse.Namespace) -> None:
         device=args.device,
     )
     run_training(cfg)
+
+
+def cmd_ablate(args: argparse.Namespace) -> None:
+    """Run an ablation study across multiple model architectures."""
+    cfg = TrainConfig(
+        data_path=Path(args.data),
+        output_dir=Path(args.output_dir),
+        batch_size=args.batch_size,
+        epochs=args.epochs,
+        lr=args.lr,
+        weight_decay=args.weight_decay,
+        num_workers=args.num_workers,
+        seed=args.seed,
+        device=args.device,
+    )
+    run_ablation(models=list(args.models), base_config=cfg)
 
 
 def cmd_eval(args: argparse.Namespace) -> None:
@@ -122,14 +164,19 @@ def main() -> None:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     # Info
-    p_info = subparsers.add_parser("info", help="Show system and class information")
+    p_info = subparsers.add_parser("info", help="Show system, model, and class information")
     p_info.set_defaults(func=cmd_info)
 
     # Train
     p_train = subparsers.add_parser("train", help="Train a Granita classifier")
     p_train.add_argument("--data", type=str, default="data/symbols/dataset.npz")
     p_train.add_argument("--output-dir", type=str, default="checkpoints")
-    p_train.add_argument("--model", type=str, default="granitanet", choices=["granitanet", "tiny"])
+    p_train.add_argument(
+        "--model",
+        type=str,
+        default="granitanet",
+        choices=list(AVAILABLE_MODELS),
+    )
     p_train.add_argument("--batch-size", type=int, default=128)
     p_train.add_argument("--epochs", type=int, default=25)
     p_train.add_argument("--lr", type=float, default=1e-3)
@@ -137,6 +184,29 @@ def main() -> None:
     p_train.add_argument("--num-workers", type=int, default=2)
     p_train.add_argument("--device", type=str, default="auto")
     p_train.set_defaults(func=cmd_train)
+
+    # Ablate
+    p_ablate = subparsers.add_parser(
+        "ablate",
+        help="Run an ablation study across multiple model architectures",
+    )
+    p_ablate.add_argument("--data", type=str, default="data/symbols/dataset.npz")
+    p_ablate.add_argument("--output-dir", type=str, default="checkpoints/ablation")
+    p_ablate.add_argument(
+        "--models",
+        nargs="+",
+        default=list(DEFAULT_ABLATION_MODELS),
+        choices=list(AVAILABLE_MODELS),
+        help="List of model architectures to compare",
+    )
+    p_ablate.add_argument("--batch-size", type=int, default=128)
+    p_ablate.add_argument("--epochs", type=int, default=15)
+    p_ablate.add_argument("--lr", type=float, default=1e-3)
+    p_ablate.add_argument("--weight-decay", type=float, default=1e-4)
+    p_ablate.add_argument("--num-workers", type=int, default=2)
+    p_ablate.add_argument("--seed", type=int, default=42)
+    p_ablate.add_argument("--device", type=str, default="auto")
+    p_ablate.set_defaults(func=cmd_ablate)
 
     # Eval
     p_eval = subparsers.add_parser("eval", help="Evaluate a model checkpoint")

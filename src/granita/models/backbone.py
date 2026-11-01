@@ -2,10 +2,48 @@
 
 from __future__ import annotations
 
+from typing import Final
+
 import torch
 import torch.nn as nn
 
 from granita.config import DEFAULT_CLASSES, DEFAULT_IN_CHANNELS
+from granita.models.iformer import GranitaIFormer
+from granita.models.lsnet import GranitaLSNet
+from granita.models.regla import GranitaReGLA
+
+AVAILABLE_MODELS: Final[tuple[str, ...]] = (
+    "granitanet",
+    "tiny",
+    "regla",
+    "regla_t",
+    "regla_s",
+    "iformer",
+    "iformer_t",
+    "iformer_s",
+    "lsnet",
+    "lsnet_t",
+    "lsnet_s",
+)
+
+MODEL_DESCRIPTIONS: Final[dict[str, str]] = {
+    "granitanet": "Residual ConvNet with Squeeze-and-Excitation channel attention",
+    "tiny": "Ultra-compact 3-stage CNN (~40k params) for microsecond latency",
+    "regla": "ReGLA (kakigori backbone): ELRF local convs + ReLU Gated Modulated Attention",
+    "regla_t": "ReGLA-Tiny (depths 2-2-4-2, dims 32-64-128-256)",
+    "regla_s": "ReGLA-Small (depths 2-2-6-2, dims 48-96-192-384)",
+    "iformer": "iFormer (ICLR 2025): Mobile ConvNeXt + Single-Head Modulation Attention (SHMA)",
+    "iformer_t": "iFormer-Tiny (depths 2-2-4-2, dims 32-64-128-256)",
+    "iformer_s": "iFormer-Small (depths 2-2-6-2, dims 48-96-192-384)",
+    "lsnet": "LSNet (CVPR 2025): 'See Large, Focus Small' LKP + dynamic SKA convolutions",
+    "lsnet_t": "LSNet-Tiny (depths 2-2-4-2, dims 32-64-128-256)",
+    "lsnet_s": "LSNet-Small (depths 2-2-6-2, dims 48-96-192-384)",
+}
+
+
+def count_parameters(model: nn.Module) -> int:
+    """Return the number of trainable parameters in a model."""
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 
 class SqueezeExcitation(nn.Module):
@@ -174,6 +212,27 @@ def create_model(
         return GranitaNet(num_classes=num_classes, in_channels=in_channels, dropout=dropout)
     if name in ("granitatiny", "tiny", "lenet"):
         return GranitaTiny(num_classes=num_classes, in_channels=in_channels)
+    if name in ("regla", "regla_t", "regla_s"):
+        return GranitaReGLA(
+            variant=name,
+            num_classes=num_classes,
+            in_channels=in_channels,
+            dropout=dropout,
+        )
+    if name in ("iformer", "iformer_t", "iformer_s"):
+        return GranitaIFormer(
+            variant=name,
+            num_classes=num_classes,
+            in_channels=in_channels,
+            dropout=dropout,
+        )
+    if name in ("lsnet", "lsnet_t", "lsnet_s"):
+        return GranitaLSNet(
+            variant=name,
+            num_classes=num_classes,
+            in_channels=in_channels,
+            dropout=dropout,
+        )
     raise ValueError(
-        f"Unknown model architecture: '{model_name}'. Choose from 'granitanet', 'tiny'."
+        f"Unknown model architecture: '{model_name}'. Choose from {list(AVAILABLE_MODELS)}."
     )
