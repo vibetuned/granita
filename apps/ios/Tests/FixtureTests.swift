@@ -14,6 +14,7 @@ final class FixtureTests: XCTestCase {
         struct Fixture: Decodable {
             let drawn_as: String
             let strokes: [[[Double]]]
+            let note: [Double]?
             let fraction: Double
             let context_vector: [Float]
             let pixels: [UInt8]
@@ -26,6 +27,12 @@ final class FixtureTests: XCTestCase {
         let classes: [String]
         let fixtures: [Fixture]
         var staffGeometry: Staff { Staff(space: staff.staff_space, middleY: staff.middle_y, leftX: staff.left_x, rightX: staff.right_x) }
+        /// The staff with the fixture's notehead, if it has one.
+        func staff(for f: Fixture) -> Staff {
+            var s = staffGeometry
+            s.note = f.note.map { CGPoint(x: $0[0], y: $0[1]) }
+            return s
+        }
     }
 
     static let fixtures: Fixtures = {
@@ -55,44 +62,41 @@ final class FixtureTests: XCTestCase {
         }
     }
 
-    /// The context derived from strokes on the fixture staff.
+    /// The context derived from strokes on the fixture staff, with its notehead when
+    /// the fixture has one (the note offsets and the above / below / left / right flags).
     func testContextVector() {
-        let staff = Self.fixtures.staffGeometry
         for f in Self.fixtures.fixtures {
-            let v = SymbolContext(strokes: f.points, staff: staff).vector
+            let v = SymbolContext(strokes: f.points, staff: Self.fixtures.staff(for: f)).vector
             XCTAssertEqual(v.count, f.context_vector.count)
             for (a, b) in zip(v, f.context_vector) { XCTAssertEqual(a, b, accuracy: 1e-5, f.drawn_as) }
         }
     }
 
-    /// The app's rasteriser against Pillow's: the size rule exactly; the drawing close
-    /// (Core Graphics and Pillow rasterise a wide line differently: on the 13 fixtures
-    /// the mean difference is 0.4–2.6 grey levels and at most 14 pixels are far off);
-    /// and the reference answer in the model's top two from the app's own drawing. The
-    /// top-1 agreement is printed, not asserted: a shape the model is unsure of (the
-    /// hollow "whole note", 79 %) can flip on a few pixels.
+    /// The app's rasteriser against Pillow's: the size rule exactly, and the model's answer
+    /// from the app's own drawing the same as from Pillow's. Core Graphics and Pillow
+    /// rasterise a wide line differently, so the pixels are only guarded against a gross
+    /// error (a wrong scale, axis or pen: mean |Δ| under 10 grey levels, fewer than half
+    /// the ink pixels far off for a glyph of more than 16) and the exact numbers are printed.
     func testRasteriserMatchesGranita() throws {
         let model = try GranitaModel(bundle: Bundle.main, computeUnits: .cpuOnly)
         let staff = Self.fixtures.staffGeometry
         var report: [String] = []
-        var agreed = 0
         for f in Self.fixtures.fixtures {
             let strokes = f.points
             XCTAssertEqual(StrokeRaster.fraction(of: strokes, staffSpace: staff.space), f.fraction, accuracy: 1e-6, f.drawn_as)
             let px = StrokeRaster.render(strokes, fraction: f.fraction)
             let meanDiff = zip(px, f.pixels).map { abs(Double($0) - Double($1)) }.reduce(0, +) / Double(px.count)
             let farOff = zip(px, f.pixels).filter { abs(Int($0) - Int($1)) > 64 }.count
-            XCTAssertLessThan(meanDiff, 4, "\(f.drawn_as): the drawing drifted from Pillow's")
-            XCTAssertLessThan(farOff, 32, "\(f.drawn_as): the drawing drifted from Pillow's")
+            let ink = f.pixels.filter { $0 < 128 }.count
+            XCTAssertLessThan(meanDiff, 10, "\(f.drawn_as): the drawing is not Pillow's")
+            // A dot has six ink pixels; its edge alone can move half of them.
+            if ink > 16 { XCTAssertLessThan(farOff * 2, ink, "\(f.drawn_as): the drawing is not Pillow's") }
             let p = try model.predict(input: StrokeRaster.normalize(px), context: f.context_vector)
-            let labels = p.top.prefix(2).map(\.label)
-            XCTAssertTrue(labels.contains(f.top.label), "\(f.drawn_as): \(f.top.label) not in the top two \(labels)")
-            if labels.first == f.top.label { agreed += 1 }
+            XCTAssertEqual(p.top.first?.label, f.top.label, f.drawn_as)
             report.append(String(
-                format: "%@: mean |Δ| %.2f, %d of %d pixels far off, top-1 %@ (reference %@ at %.0f %%)",
-                f.drawn_as, meanDiff, farOff, px.count, p.top.first!.label, f.top.label, f.top.confidence * 100))
+                format: "%@: mean |Δ| %.2f, %d of %d ink pixels far off, top-1 %@ (reference %@ at %.0f %%)",
+                f.drawn_as, meanDiff, farOff, ink, p.top.first!.label, f.top.label, f.top.confidence * 100))
         }
-        print("rasteriser: top-1 agrees on \(agreed) of \(Self.fixtures.fixtures.count) fixtures")
         print(report.joined(separator: "\n"))
     }
 }

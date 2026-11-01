@@ -24,8 +24,11 @@ object StrokeRaster {
     const val SIZE = 32
     /** `max(2, round(96 * 0.05))`: the pen width that scored best on held-out writers. */
     const val PEN_WIDTH = 5f
-    /** Staff spaces that fill the canvas (granita's `CANVAS_STAFF_SPACES`). */
-    const val CANVAS_STAFF_SPACES = 8.8
+    /**
+     * Staff spaces that fill the canvas (granita's `CANVAS_STAFF_SPACES`): 3.0, calibrated by
+     * hand on the tablets with this shell's buttons (musicset's HOMUS value was 8.8).
+     */
+    const val CANVAS_STAFF_SPACES = 3.0
     val FRACTION_RANGE = 0.08..0.9
 
     class Bounds(val minX: Double, val maxX: Double, val minY: Double, val maxY: Double) {
@@ -45,10 +48,16 @@ object StrokeRaster {
 
     /**
      * `fraction_from_staff_space`: the drawing keeps its natural size, its longer side in
-     * staff spaces over the 8.8 that fill the canvas, clamped.
+     * staff spaces over the `spacesPerCanvas` that fill the canvas (granita's 3.0), clamped
+     * to `minFraction`..0.9 (granita's floor is 0.08). The shell lets both be changed, to
+     * calibrate them by hand.
      */
-    fun fraction(strokes: List<List<PointF>>, staffSpace: Double): Double =
-        (bounds(strokes).span / (CANVAS_STAFF_SPACES * staffSpace)).coerceIn(FRACTION_RANGE)
+    fun fraction(
+        strokes: List<List<PointF>>,
+        staffSpace: Double,
+        spacesPerCanvas: Double = CANVAS_STAFF_SPACES,
+        minFraction: Double = FRACTION_RANGE.start,
+    ): Double = (bounds(strokes).span / (spacesPerCanvas * staffSpace)).coerceIn(minFraction, FRACTION_RANGE.endInclusive)
 
     /** The 96 x 96 drawing, row 0 at the top, 255 = paper. */
     fun draw(strokes: List<List<PointF>>, fraction: Double): IntArray {

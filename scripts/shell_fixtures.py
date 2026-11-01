@@ -7,11 +7,13 @@ model (Core ML, LiteRT) against the reference:
     uv run python scripts/shell_fixtures.py        # -> models/granitanet/fixtures.json
 
 Each fixture carries the strokes in page pixels, the staff they were drawn on
-(staff space, middle line, barlines), the context the shells derive from them
-(raw facts and the 16-float vector), the 32 x 32 image ``render_strokes`` makes
-(uniform pen, natural size from the staff space) and the checkpoint's logits,
-with and without the context. The shapes are polylines, not handwriting: the
-fixtures pin numbers, not accuracy, and ``drawn_as`` is only what was meant.
+(staff space, middle line, barlines) and, for some, the centre of a notehead on
+it; the context the shells derive from them (raw facts and the 16-float vector,
+the note offsets when the notehead is within 8 spaces); the 32 x 32 image
+``render_strokes`` makes (uniform pen, natural size from the staff space); and
+the checkpoint's logits, with and without the context. The shapes are polylines,
+not handwriting: the fixtures pin numbers, not accuracy, and ``drawn_as`` is only
+what was meant.
 
 The 96 -> 32 downsample is also re-implemented here (``downsample_like_pil``)
 and checked against Pillow, so the shells can copy that exact filter.
@@ -27,7 +29,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from granita.context import SymbolContext, context_vector
+from granita.context import NOTE_RANGE, SymbolContext, context_vector
 from granita.infer.predictor import (
     GranitaClassifier,
     Stroke,
@@ -62,10 +64,15 @@ def _arc(cx: float, cy: float, r: float, n: int = 12) -> Stroke:
     ]
 
 
-FIXTURES: list[tuple[str, list[Stroke]]] = [
-    ("barline", [[(400.0, 252.0), (400.5, 348.0)]]),
-    ("dot in the staff", [[(420.0, 288.0), (421.0, 289.0), (420.0, 290.0)]]),
-    ("dot above the staff", [[(400.0, 230.0), (401.0, 231.0), (400.0, 232.0)]]),
+Note = tuple[float, float] | None
+"""A notehead's centre on the staff, in page pixels, or none."""
+
+# (what was meant, the strokes, a notehead): the dots sit right of a note and above
+# one, the accidentals left of one, the fermata and the fingering above one.
+FIXTURES: list[tuple[str, list[Stroke], Note]] = [
+    ("barline", [[(400.0, 252.0), (400.5, 348.0)]], None),
+    ("dot in the staff", [[(420.0, 288.0), (421.0, 289.0), (420.0, 290.0)]], (400.0, 288.0)),
+    ("dot above the staff", [[(400.0, 230.0), (401.0, 231.0), (400.0, 232.0)]], (400.0, 288.0)),
     (
         "sharp",
         [
@@ -74,6 +81,7 @@ FIXTURES: list[tuple[str, list[Stroke]]] = [
             [(380.0, 292.0), (420.0, 284.0)],
             [(380.0, 312.0), (420.0, 304.0)],
         ],
+        (424.0, 300.0),
     ),
     (
         "flat",
@@ -81,6 +89,7 @@ FIXTURES: list[tuple[str, list[Stroke]]] = [
             [(390.0, 250.0), (390.0, 330.0)],
             [(390.0, 300.0), (405.0, 296.0), (410.0, 310.0), (400.0, 326.0), (390.0, 330.0)],
         ],
+        (430.0, 312.0),
     ),
     (
         "natural",
@@ -90,6 +99,7 @@ FIXTURES: list[tuple[str, list[Stroke]]] = [
             [(392.0, 296.0), (408.0, 292.0)],
             [(392.0, 320.0), (408.0, 316.0)],
         ],
+        None,
     ),
     (
         "quarter note",
@@ -99,9 +109,10 @@ FIXTURES: list[tuple[str, list[Stroke]]] = [
             _loop(400.0, 324.0, 3.0, 2.0),
             [(411.0, 324.0), (411.0, 250.0)],
         ],
+        None,
     ),
-    ("half note", [_loop(400.0, 324.0, 11.0, 8.0), [(411.0, 324.0), (411.0, 250.0)]]),
-    ("whole note", [_loop(400.0, 300.0, 13.0, 8.0)]),
+    ("half note", [_loop(400.0, 324.0, 11.0, 8.0), [(411.0, 324.0), (411.0, 250.0)]], None),
+    ("whole note", [_loop(400.0, 300.0, 13.0, 8.0)], None),
     (
         "quarter rest",
         [
@@ -115,27 +126,35 @@ FIXTURES: list[tuple[str, list[Stroke]]] = [
                 (404.0, 340.0),
             ]
         ],
+        None,
     ),
-    ("half rest", [[(388.0, 296.0), (412.0, 296.0)], [(388.0, 300.0), (412.0, 300.0)]]),
-    ("fermata", [_arc(400.0, 240.0, 18.0), [(400.0, 240.0), (401.0, 241.0)]]),
+    ("half rest", [[(388.0, 296.0), (412.0, 296.0)], [(388.0, 300.0), (412.0, 300.0)]], None),
+    ("fermata", [_arc(400.0, 240.0, 18.0), [(400.0, 240.0), (401.0, 241.0)]], (400.0, 288.0)),
     (
         "fingering 3",
         [[(392.0, 262.0), (410.0, 262.0), (400.0, 276.0), (410.0, 290.0), (392.0, 292.0)]],
+        (401.0, 324.0),
     ),
 ]
 
 
-def symbol_context(strokes: list[Stroke]) -> SymbolContext:
-    """The context a shell derives from strokes on the fixture staff: no notehead near."""
+def symbol_context(strokes: list[Stroke], note: Note) -> SymbolContext:
+    """The context a shell derives from strokes on the fixture staff, the notehead's
+    offset when it is within ``NOTE_RANGE`` staff spaces of the symbol's centre."""
     xs = [x for s in strokes for x, _ in s]
     ys = [y for s in strokes for _, y in s]
     cx, cy = 0.5 * (min(xs) + max(xs)), 0.5 * (min(ys) + max(ys))
+    note_dx = note_dy = None
+    if note is not None:
+        dx, dy = (cx - note[0]) / STAFF_SPACE, (cy - note[1]) / STAFF_SPACE
+        if math.hypot(dx, dy) <= NOTE_RANGE:
+            note_dx, note_dy = dx, dy
     return SymbolContext(
         y_staff=(cy - MIDDLE_Y) / STAFF_SPACE,
         x_measure=(cx - LEFT_X) / (RIGHT_X - LEFT_X),
         barline=min(cx - LEFT_X, RIGHT_X - cx) / STAFF_SPACE,
-        note_dx=None,
-        note_dy=None,
+        note_dx=note_dx,
+        note_dy=note_dy,
         width=(max(xs) - min(xs)) / STAFF_SPACE,
         height=(max(ys) - min(ys)) / STAFF_SPACE,
     )
@@ -181,13 +200,13 @@ def main() -> None:
     zero_ctx = torch.zeros(1, clf.context_dim)
     fixtures = []
     worst = 0
-    for drawn_as, strokes in FIXTURES:
+    for drawn_as, strokes, note in FIXTURES:
         fraction = fraction_from_staff_space(strokes, STAFF_SPACE)
         big = render_strokes(strokes, CANVAS_PX, fraction=fraction, canvas=CANVAS_PX)
         glyph = render_strokes(strokes, SIZE_PX, fraction=fraction, canvas=CANVAS_PX)
         mine = downsample_like_pil(big)
         worst = max(worst, int(np.abs(mine.astype(int) - glyph.astype(int)).max()))
-        ctx = symbol_context(strokes)
+        ctx = symbol_context(strokes, note)
         vec = context_vector(ctx)
         x = ((torch.from_numpy(glyph).float() / 255.0 - 0.5) / 0.5).view(1, 1, SIZE_PX, SIZE_PX)
         with torch.no_grad():
@@ -199,13 +218,14 @@ def main() -> None:
             {
                 "drawn_as": drawn_as,
                 "strokes": [[[x, y] for x, y in s] for s in strokes],
+                "note": list(note) if note is not None else None,
                 "fraction": round(fraction, 6),
                 "context": {
                     "y_staff": ctx.y_staff,
                     "x_measure": ctx.x_measure,
                     "barline": ctx.barline,
-                    "note_dx": None,
-                    "note_dy": None,
+                    "note_dx": ctx.note_dx,
+                    "note_dy": ctx.note_dy,
                     "width": ctx.width,
                     "height": ctx.height,
                 },

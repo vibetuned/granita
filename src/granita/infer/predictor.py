@@ -51,9 +51,15 @@ ContextLike = SymbolContext | Mapping[str, Any] | np.ndarray | None
 # 0.05 (~1.6px on 32x32) scored best on held-out handwriting in the stroke-style sweep.
 DEFAULT_STROKE_FRACTION = 0.7
 DEFAULT_PEN_WIDTH = 0.05
-CANVAS_STAFF_SPACES = 8.8
-"""Staff spaces that fill the glyph canvas; musicset's size rule for real pen strokes
-(a HOMUS canvas of 150 pen units is ~8.8 staff spaces). Keep in sync with musicset.homus."""
+CANVAS_STAFF_SPACES = 3.0
+"""Staff spaces that fill the glyph canvas when an editor sends its staff space.
+
+Calibrated by hand on an iPad and a Galaxy Tab with the test shells (``apps/``,
+2026-11-01): at 3.0 every symbol written at its natural size on the staff was read,
+while musicset's HOMUS value (8.8, a 150-unit HOMUS canvas taken as ~8.8 staff spaces,
+``musicset.homus.CANVAS_STAFF_SPACES``) left fingerings and dynamics a few pixels
+tall, far below the 0.52-0.90 their training renders use. The HOMUS constant stays
+what it is, a property of that dataset; this one is the editor's rule."""
 FRACTION_RANGE = (0.08, 0.90)
 
 

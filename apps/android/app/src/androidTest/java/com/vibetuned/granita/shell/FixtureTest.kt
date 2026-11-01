@@ -32,6 +32,7 @@ class FixtureTest {
                 }
             }
         }
+        val note: PointF? = json.optJSONArray("note")?.let { PointF(it.getDouble(0).toFloat(), it.getDouble(1).toFloat()) }
         val fraction = json.getDouble("fraction")
         val contextVector = json.getJSONArray("context_vector").floats()
         val pixels = json.getJSONArray("pixels").let { a -> IntArray(a.length()) { a.getInt(it) } }
@@ -52,6 +53,9 @@ class FixtureTest {
             Staff(it.getDouble("staff_space"), it.getDouble("middle_y"), it.getDouble("left_x"), it.getDouble("right_x"))
         }
         val fixtures = doc.getJSONArray("fixtures").let { a -> List(a.length()) { Fixture(a.getJSONObject(it)) } }
+
+        /** The staff with the fixture's notehead, if it has one. */
+        fun staffFor(f: Fixture) = Staff(staff.space, staff.middleY, staff.leftX, staff.rightX, f.note)
 
         fun maxAbsDiff(a: FloatArray, b: FloatArray): Float {
             assertEquals(a.size, b.size)
@@ -78,27 +82,30 @@ class FixtureTest {
         }
     }
 
-    /** The context derived from strokes on the fixture staff. */
+    /**
+     * The context derived from strokes on the fixture staff, with its notehead when the
+     * fixture has one (the note offsets and the above / below / left / right flags).
+     */
     @Test
     fun contextVector() {
         for (f in fixtures) {
-            val v = SymbolContext.fromStrokes(f.strokes, staff).vector()
+            val v = SymbolContext.fromStrokes(f.strokes, staffFor(f)).vector()
             assertEquals(f.contextVector.size, v.size)
             for (i in v.indices) assertEquals(f.drawnAs, f.contextVector[i], v[i], 1e-5f)
         }
     }
 
     /**
-     * The app's rasteriser against Pillow's: the size rule exactly; the drawing close
-     * (Android's Canvas and Pillow rasterise a wide line differently); and the reference
-     * answer in the model's top two from the app's own drawing. The top-1 agreement is
-     * logged, not asserted: a shape the model is unsure of can flip on a few pixels.
+     * The app's rasteriser against Pillow's: the size rule exactly, and the model's answer
+     * from the app's own drawing the same as from Pillow's. Android's Canvas and Pillow
+     * rasterise a wide line differently, so the pixels are only guarded against a gross
+     * error (a wrong scale, axis or pen: mean |Δ| under 10 grey levels, fewer than half the
+     * ink pixels far off for a glyph of more than 16) and the exact numbers are logged.
      */
     @Test
     fun rasteriserMatchesGranita() {
         GranitaModel(assets).use { model ->
             val report = mutableListOf<String>()
-            var agreed = 0
             for (f in fixtures) {
                 assertEquals(f.drawnAs, f.fraction, StrokeRaster.fraction(f.strokes, staff.space), 1e-6)
                 val px = StrokeRaster.render(f.strokes, f.fraction)
@@ -110,20 +117,19 @@ class FixtureTest {
                     if (d > 64) farOff++
                 }
                 val meanDiff = sum / px.size
-                assertTrue("${f.drawnAs}: the drawing drifted from Pillow's (mean |Δ| $meanDiff)", meanDiff < 4)
-                assertTrue("${f.drawnAs}: the drawing drifted from Pillow's ($farOff pixels far off)", farOff < 32)
+                val ink = f.pixels.count { it < 128 }
+                assertTrue("${f.drawnAs}: the drawing is not Pillow's (mean |Δ| $meanDiff)", meanDiff < 10)
+                // A dot has six ink pixels; its edge alone can move half of them.
+                if (ink > 16) assertTrue("${f.drawnAs}: the drawing is not Pillow's ($farOff of $ink ink pixels far off)", farOff * 2 < ink)
                 val p = model.predict(StrokeRaster.normalize(px), f.contextVector)
-                val labels = p.top.take(2).map { it.label }
-                assertTrue("${f.drawnAs}: ${f.topLabel} not in the top two $labels", f.topLabel in labels)
-                if (labels[0] == f.topLabel) agreed++
+                assertEquals(f.drawnAs, f.topLabel, p.top[0].label)
                 report.add(
                     String.format(
-                        Locale.ROOT, "%s: mean |Δ| %.2f, %d of %d pixels far off, top-1 %s (reference %s at %.0f %%)",
-                        f.drawnAs, meanDiff, farOff, px.size, p.top[0].label, f.topLabel, f.topConfidence * 100,
+                        Locale.ROOT, "%s: mean |Δ| %.2f, %d of %d ink pixels far off, top-1 %s (reference %s at %.0f %%)",
+                        f.drawnAs, meanDiff, farOff, ink, p.top[0].label, f.topLabel, f.topConfidence * 100,
                     ),
                 )
             }
-            Log.i(TAG, "rasteriser: top-1 agrees on $agreed of ${fixtures.size} fixtures")
             Log.i(TAG, report.joinToString("\n"))
         }
     }

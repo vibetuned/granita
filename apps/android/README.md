@@ -10,6 +10,16 @@ context* off sends the all-zero vector instead, to compare.
 Every stroke's end classifies all the strokes since the last *Clear*, so a sharp can
 take its four strokes.
 
+*Add a note* then a tap on the staff places a notehead (snapped to the lines and
+spaces; *Remove the note* takes it away), so the context's note features are real: the
+symbol's offset from the notehead and whether it sits above, below, left or right of
+it. Two pairs of − / + buttons change the size rule, to calibrate it against
+natural-size writing: how many staff spaces fill the canvas (granita's 3.0, which these
+buttons calibrated: a symbol's longer side over that many spaces is its fraction of the
+canvas) and the smallest fraction a symbol is drawn at (granita's 0.08: a floor lifts
+the small symbols and leaves the large ones at their natural size). The status line
+shows the fraction used.
+
 ## What an editor would lift
 
 - `StrokeRaster.kt`: the strokes to the model's image, the way granita's
@@ -46,11 +56,11 @@ or an emulator:
 - **the model**, fed the reference pixels and context: the same top-1, logits within
   1e-3 (fp32);
 - **the context** derived from the strokes: the reference vector;
-- **the rasteriser**: the size rule exactly; the drawing close to Pillow's (Android's
-  Canvas rasterises a wide line differently: within 4 grey levels on average, at most
-  31 pixels far off); and the reference answer in the model's top two from the app's
-  own drawing. How many top-1s agree is logged, not asserted: a shape the model is
-  unsure of can flip on a few pixels.
+- **the rasteriser**: the size rule exactly, and the model's answer from the app's
+  own drawing the same as from Pillow's. Android's Canvas rasterises a wide line a
+  little differently from Pillow, so the pixels are only guarded against a gross
+  error (mean difference under 10 grey levels, fewer than half the ink pixels far
+  off for a glyph of more than 16); the exact numbers are logged.
 
 The numbers go to logcat under the tag `granita`
 (`adb logcat -s granita`).

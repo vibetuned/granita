@@ -156,7 +156,7 @@
     "size_px": 32,
     "pen_width": 0.05,
     "pen_width_note": "fraction of the canvas; uniform width, round caps, no blur; 0.05 scored best on held-out writers, training covered 0.055-0.115",
-    "fraction": "longer side of the strokes' bounding box as a fraction of the canvas: min(0.9, max(0.08, span / (8.8 * staff_space)))",
+    "fraction": "longer side of the strokes' bounding box as a fraction of the canvas: min(0.9, max(0.08, span / (3.0 * staff_space)))",
     "staff_space": "pixels between two staff lines in the strokes' coordinates",
     "centre": "bounding-box centre at the canvas centre, aspect preserved",
     "downsample": "bilinear to size_px"

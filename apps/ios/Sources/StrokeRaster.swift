@@ -3,8 +3,8 @@ import Foundation
 
 /// Strokes to the model's 32 x 32 image, the way granita's `render_strokes` does it
 /// (uniform pen, natural size): the strokes' bounding box centred on a 96 px canvas,
-/// its longer side `fraction` of the canvas, a 5 px pen with round caps and joins and
-/// no anti-aliasing, black on white; then Pillow's bilinear reduction to 32 px, which
+/// its longer side `fraction` of the canvas, a 5 px pen on whole pixels with no
+/// anti-aliasing, black on white; then Pillow's bilinear reduction to 32 px, which
 /// `downsample` re-implements (`downsample_like_pil` in scripts/shell_fixtures.py
 /// checks the same code against Pillow). Pixel 255 is paper, 0 ink.
 enum StrokeRaster {
@@ -12,8 +12,9 @@ enum StrokeRaster {
     static let size = 32
     /// `max(2, round(96 * 0.05))`: the pen width that scored best on held-out writers.
     static let penWidth = 5.0
-    /// Staff spaces that fill the canvas (granita's `CANVAS_STAFF_SPACES`).
-    static let canvasStaffSpaces = 8.8
+    /// Staff spaces that fill the canvas (granita's `CANVAS_STAFF_SPACES`): 3.0, calibrated
+    /// by hand on the tablets with this shell's stepper (musicset's HOMUS value was 8.8).
+    static let canvasStaffSpaces = 3.0
     static let fractionRange = 0.08...0.9
 
     struct Bounds {
@@ -31,10 +32,15 @@ enum StrokeRaster {
     }
 
     /// `fraction_from_staff_space`: the drawing keeps its natural size — its longer side in
-    /// staff spaces over the 8.8 that fill the canvas, clamped.
-    static func fraction(of strokes: [[CGPoint]], staffSpace: Double) -> Double {
-        let raw = bounds(strokes).span / (canvasStaffSpaces * staffSpace)
-        return min(fractionRange.upperBound, max(fractionRange.lowerBound, raw))
+    /// staff spaces over the `spacesPerCanvas` that fill the canvas (granita's 3.0),
+    /// clamped to `minFraction`…0.9 (granita's floor is 0.08). The shell lets both be
+    /// changed, to calibrate them by hand.
+    static func fraction(
+        of strokes: [[CGPoint]], staffSpace: Double,
+        spacesPerCanvas: Double = canvasStaffSpaces, minFraction: Double = fractionRange.lowerBound
+    ) -> Double {
+        let raw = bounds(strokes).span / (spacesPerCanvas * staffSpace)
+        return min(fractionRange.upperBound, max(minFraction, raw))
     }
 
     /// The 96 x 96 drawing, row 0 at the top, 255 = paper.
@@ -58,23 +64,29 @@ enum StrokeRaster {
             ctx.setStrokeColor(gray: 0, alpha: 1)
             ctx.setFillColor(gray: 0, alpha: 1)
             ctx.setLineWidth(penWidth)
-            // Pillow's wide polyline has flat ends and round joins; the dots below
-            // round the ends. Closest to Pillow of the three caps on the fixtures.
+            // Pillow's wide polyline has flat ends (the dots below round them) and a
+            // small pie slice at a corner, which a bevel comes nearest to. Pillow also
+            // truncates every coordinate to a whole pixel first, while Core Graphics
+            // addresses a pixel by its centre. Measured on the fixtures, this halves
+            // the pixels that differ; the rest is the two rasterisers' scan conversion.
             ctx.setLineCap(.butt)
-            ctx.setLineJoin(.round)
+            ctx.setLineJoin(.bevel)
             for stroke in strokes where !stroke.isEmpty {
-                let pts = stroke.map {
+                let raw = stroke.map {
                     CGPoint(x: half + (Double($0.x) - cx) * scale, y: half + (Double($0.y) - cy) * scale)
                 }
+                let pts = raw.map { CGPoint(x: Double(Int($0.x)) + 0.5, y: Double(Int($0.y)) + 0.5) }
                 if pts.count >= 2 {
                     ctx.beginPath()
                     ctx.addLines(between: pts)
                     ctx.strokePath()
                 }
-                // Pillow dots both ends (a single point is a dot of the pen).
+                // Pillow dots both ends (a single point is a dot of the pen): an ellipse
+                // in a box truncated to pixels, both bounds inclusive.
                 let r = penWidth * 0.45
-                for p in [pts.first!, pts.last!] {
-                    ctx.fillEllipse(in: CGRect(x: p.x - r, y: p.y - r, width: 2 * r, height: 2 * r))
+                for p in [raw.first!, raw.last!] {
+                    let x0 = Int(p.x - r), y0 = Int(p.y - r), x1 = Int(p.x + r), y1 = Int(p.y + r)
+                    ctx.fillEllipse(in: CGRect(x: x0, y: y0, width: x1 - x0 + 1, height: y1 - y0 + 1))
                 }
             }
         }

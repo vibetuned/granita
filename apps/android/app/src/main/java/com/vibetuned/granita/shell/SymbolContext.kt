@@ -2,13 +2,21 @@ package com.vibetuned.granita.shell
 
 import android.graphics.PointF
 import kotlin.math.abs
+import kotlin.math.hypot
 import kotlin.math.min
 
 /**
  * The staff a canvas draws, in the strokes' units: the distance between two lines,
  * the middle line, and the barline at each end.
  */
-class Staff(val space: Double, val middleY: Double, val leftX: Double, val rightX: Double)
+class Staff(
+    val space: Double,
+    val middleY: Double,
+    val leftX: Double,
+    val rightX: Double,
+    /** The centre of the notehead drawn on it, if any. */
+    val note: PointF? = null,
+)
 
 /**
  * Where a mark sits in the score, in staff spaces: granita's `SymbolContext` and
@@ -74,15 +82,28 @@ data class SymbolContext(
         /** What to send when nothing is known: all zeros, the valid flag included. */
         val UNKNOWN = FloatArray(DIM)
 
-        /** From strokes drawn on a staff. */
+        /**
+         * From strokes drawn on a staff: the notehead counts when it is within NOTE_RANGE
+         * staff spaces of the strokes' centre.
+         */
         fun fromStrokes(strokes: List<List<PointF>>, staff: Staff): SymbolContext {
             val b = StrokeRaster.bounds(strokes)
+            var noteDx: Double? = null
+            var noteDy: Double? = null
+            staff.note?.let { n ->
+                val dx = (b.centreX - n.x) / staff.space
+                val dy = (b.centreY - n.y) / staff.space
+                if (hypot(dx, dy) <= NOTE_RANGE) {
+                    noteDx = dx
+                    noteDy = dy
+                }
+            }
             return SymbolContext(
                 yStaff = (b.centreY - staff.middleY) / staff.space,
                 xMeasure = (b.centreX - staff.leftX) / (staff.rightX - staff.leftX),
                 barline = min(b.centreX - staff.leftX, staff.rightX - b.centreX) / staff.space,
-                noteDx = null,
-                noteDy = null,
+                noteDx = noteDx,
+                noteDy = noteDy,
                 width = (b.maxX - b.minX) / staff.space,
                 height = (b.maxY - b.minY) / staff.space,
             )

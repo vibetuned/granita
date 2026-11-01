@@ -7,11 +7,13 @@ struct Staff {
     var middleY: Double
     var leftX: Double
     var rightX: Double
+    /// The centre of the notehead drawn on it, if any.
+    var note: CGPoint? = nil
 }
 
 /// Where a mark sits in the score, in staff spaces — granita's `SymbolContext` and
-/// `context_vector` (granita/context.py), kept identical. The shell draws no notes,
-/// so the nearest notehead is always unknown.
+/// `context_vector` (granita/context.py), kept identical. The notehead is the one the
+/// staff canvas draws, when there is one.
 struct SymbolContext: Equatable {
     /// Centre from the staff's middle line, positive downwards.
     var yStaff: Double
@@ -37,15 +39,24 @@ struct SymbolContext: Equatable {
     /// What to send when nothing is known: all zeros, the valid flag included.
     static let unknown = [Float](repeating: 0, count: dim)
 
-    /// From strokes drawn on a staff.
+    /// From strokes drawn on a staff: the notehead counts when it is within `noteRange`
+    /// staff spaces of the strokes' centre.
     init(strokes: [[CGPoint]], staff: Staff) {
         let b = StrokeRaster.bounds(strokes)
         let (cx, cy) = b.centre
         yStaff = (cy - staff.middleY) / staff.space
         xMeasure = (cx - staff.leftX) / (staff.rightX - staff.leftX)
         barline = min(cx - staff.leftX, staff.rightX - cx) / staff.space
-        noteDx = nil
-        noteDy = nil
+        if let n = staff.note {
+            let dx = (cx - Double(n.x)) / staff.space
+            let dy = (cy - Double(n.y)) / staff.space
+            let near = (dx * dx + dy * dy).squareRoot() <= Self.noteRange
+            noteDx = near ? dx : nil
+            noteDy = near ? dy : nil
+        } else {
+            noteDx = nil
+            noteDy = nil
+        }
         width = (b.maxX - b.minX) / staff.space
         height = (b.maxY - b.minY) / staff.space
     }

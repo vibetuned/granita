@@ -10,6 +10,7 @@ from PIL import Image
 
 from granita.config import CONTEXT_DIM
 from granita.infer.predictor import (
+    CANVAS_STAFF_SPACES,
     GranitaClassifier,
     crop_glyph,
     load_strokes_json,
@@ -188,12 +189,12 @@ def test_predict_with_context() -> None:
         context={"y_staff": -3.0, "note_dx": 1.0, "note_dy": -2.0},
     )
     assert p_derived.label in ("a", "b", "c") and p_derived.top_k == p_partial.top_k
-    # without a staff space the size comes from the fraction: 0.7 of the canvas = 6.16 spaces
+    # without a staff space the size comes from the fraction: 0.7 of the canvas = 2.1 spaces
     p_fraction = clf.predict_strokes(
         strokes, fraction=0.7, context={"y_staff": -3.0, "note_dx": 1.0, "note_dy": -2.0}
     )
     expect = context_from_strokes(
-        strokes, 40.0 / (8.8 * 0.7), y_staff=-3.0, note_dx=1.0, note_dy=-2.0
+        strokes, 40.0 / (CANVAS_STAFF_SPACES * 0.7), y_staff=-3.0, note_dx=1.0, note_dy=-2.0
     )
     assert p_fraction.top_k == clf.predict_strokes(strokes, fraction=0.7, context=expect).top_k
     with pytest.raises(ValueError, match="y_staff"):
