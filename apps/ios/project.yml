@@ -1,0 +1,54 @@
+# The iOS test shell: a staff to draw on, the Core ML export classifying the
+# strokes, and a test target that checks the export and the preprocessing
+# against granita's reference fixtures. XcodeGen spec (`xcodegen generate`
+# writes GranitaShell.xcodeproj; the project is not tracked), after battuta's.
+#
+# The model and its sidecar are read straight from models/granitanet: Xcode
+# compiles the .mlpackage into the app, nothing is copied into apps/.
+name: GranitaShell
+options:
+  bundleIdPrefix: com.vibetuned.granita
+  deploymentTarget:
+    iOS: 16.0 # the Core ML program's floor (fp16 mlprogram)
+  createIntermediateGroups: true
+settings:
+  base:
+    DEVELOPMENT_TEAM: 47D2CT68R2 # Vibetuned, as battuta
+    SWIFT_VERSION: 5.9
+    # The model is loaded by URL (GranitaModel.swift); no generated class.
+    COREML_CODEGEN_LANGUAGE: None
+targets:
+  GranitaShell:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+      - path: ../../models/granitanet/granitanet.mlpackage
+      - path: ../../models/granitanet/granitanet.json
+        buildPhase: resources
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDisplayName: granita
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.vibetuned.granita.shell
+        TARGETED_DEVICE_FAMILY: "1,2"
+    scheme:
+      testTargets: [GranitaShellTests]
+  GranitaShellTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests
+      - path: ../../models/granitanet/fixtures.json
+        buildPhase: resources
+    dependencies:
+      - target: GranitaShell
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.vibetuned.granita.shell.tests
+        GENERATE_INFOPLIST_FILE: YES

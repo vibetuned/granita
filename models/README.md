@@ -21,18 +21,22 @@ batch 256, context dropout 0.25. Conclusions and the full tables are in
 
 | file | what it is | checked against PyTorch |
 |---|---|---|
-| `granitanet.mlpackage/` | Core ML program, iOS 16+, fp16 weights (3.9 MB) | not on Linux; check once on the Mac |
-| `granitanet.tflite` | LiteRT / TFLite, static batch 1 (7.7 MB) | max abs. diff 2.4e-06 |
+| `granitanet.mlpackage/` | Core ML program, iOS 16+, fp16 weights (3.9 MB) | fp16: max abs. diff 1.5e-02 on the Mac (CPU), 2.4e-02 (CPU) and 3.3e-02 (every unit) on the iPad simulator over the 13 fixtures, the same top-1 on each |
+| `granitanet.tflite` | LiteRT / TFLite, static batch 1 (7.7 MB) | max abs. diff 2.4e-06; 1.1e-05 on a Galaxy Tab S8 Ultra (LiteRT 2.3.2, CPU) over the fixtures |
 | `granitanet.onnx` | ONNX opset 18, dynamic batch (7.8 MB) | max abs. diff 1.9e-06 |
 | `granitanet.pt2` | `torch.export` program, dynamic batch (7.9 MB) | exact |
-| `granitanet.json` | sidecar: class list, groups, input and output spec, stroke rasterisation rules, context features | |
+| `granitanet.json` | sidecar: class list, groups, input and output spec, stroke rasterisation rules, context features, the tflite's tensor names | |
+| `fixtures.json` | 13 stroke sets on a staff with their context, rendered image and logits (`scripts/shell_fixtures.py`), for the mobile test shells in `apps/` | |
 | `best_model.pt` | PyTorch checkpoint (weights only) for `GranitaClassifier.from_checkpoint` and re-export | |
 | `history.json`, `eval_test.md`, `context_effect.md` | training curve and test tables | |
 
 ### Feeding the model from the editor
 
 Two inputs, `input` `(N, 1, 32, 32)` float32 and `context` `(N, 9)` float32; one output,
-`logits` `(N, 61)`, softmax for confidences. The sidecar spells out every rule; in short:
+`logits` `(N, 61)`, softmax for confidences. Core ML and ONNX keep those names; the tflite
+has litert-torch's instead, signature `serving_default` with inputs `args_0` (the image)
+and `args_1` (the context) and output `output_0` (the sidecar's `litert` block). The
+sidecar spells out every rule; in short:
 
 1. Rasterise the pen strokes on a 96 px canvas: centre the strokes' bounding box, keep the
    aspect ratio, make the longer side span `fraction = clamp(span / (8.8 * staff_space), 0.08, 0.9)`
@@ -44,3 +48,6 @@ Two inputs, `input` `(N, 1, 32, 32)` float32 and `context` `(N, 9)` float32; one
    measure mapped to [-1, 1], distance to the nearest barline / 8, whether a notehead is within
    8 spaces, its offset / 8, width / 8, height / 8. Send all zeros when unknown; the model was
    trained for that too.
+
+All three steps are implemented in Swift and in Kotlin in the test shells (`apps/ios`,
+`apps/android`), checked against `fixtures.json` on an iPad and a Galaxy Tab.

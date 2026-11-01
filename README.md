@@ -49,6 +49,9 @@ uv sync --extra data         # + musicset, to build datasets with `uv run musics
 uv sync --extra export       # + ONNX, Core ML and LiteRT toolchains
 ```
 
+On Linux `torch` comes from the CUDA 13 index, elsewhere from PyPI; `litert-torch` has
+Linux wheels only, so the LiteRT export needs Linux (Core ML and ONNX export anywhere).
+
 Run checks using `uv run`:
 
 ```bash
@@ -165,6 +168,17 @@ uv run python scripts/export_mobile.py --checkpoint checkpoints/granitanet_ctx/b
 
 [models/](models/) holds the released weights and their exports, tracked in git on purpose so a checkout has everything an app needs: the checkpoint, Core ML, LiteRT, ONNX and pt2 files, the sidecar and the test tables. [models/README.md](models/README.md) documents the inputs and the stroke rasterisation rules for the editor.
 
+## Mobile test shells
+
+[apps/ios](apps/ios/) (SwiftUI, Core ML) and [apps/android](apps/android/) (Kotlin, LiteRT's
+CompiledModel API) are small apps that run the released exports on a tablet: draw a symbol
+on a staff with the pen and see the top five classes, the 32 × 32 image the model saw, its
+time and the context derived from the strokes. Each carries the three steps an editor needs
+(the stroke rasteriser, the context vector, the model fed and read) and a test that checks
+them against [`models/granitanet/fixtures.json`](models/granitanet/fixtures.json), made by
+`scripts/shell_fixtures.py` from the PyTorch checkpoint. Each app's README says how to build
+and run it.
+
 ## Results
 
 Every run writes its tables next to its weights under `checkpoints/<run>/`; `uv run python scripts/collect_results.py` copies them into [results/](results/) (tracked, weights excluded) and regenerates `results/INDEX.md`. [results/README.md](results/README.md) holds the conclusions: backbone ablation, per-source accuracy with held-out HOMUS writers, the pen-versus-brush sweep, the synthetic-stroke transfer test, the writer learning curve (`scripts/writer_curve.py`) and the effect of the conditioning vector (`scripts/context_effect.py`).
@@ -207,12 +221,16 @@ granita/
 ├── .gitignore
 ├── .python-version
 ├── LICENSE                     # AGPL-3.0-only
+├── apps/
+│   ├── ios/                    # test shell: SwiftUI + Core ML (xcodegen project.yml)
+│   └── android/                # test shell: Kotlin + LiteRT (Gradle)
 ├── models/                     # released weights and exports (tracked)
 ├── results/                    # result tables and conclusions (tracked)
 ├── scripts/
 │   ├── collect_results.py      # checkpoints/*/ tables -> results/
 │   ├── context_effect.py       # a context model scored with and without its context
 │   ├── export_mobile.py        # every export format + sidecar, with parity checks
+│   ├── shell_fixtures.py       # strokes, images and logits for the test shells' checks
 │   ├── stroke_style_sweep.py   # pen vs brush rendering sweep on held-out HOMUS writers
 │   └── writer_curve.py         # held-out accuracy vs number of HOMUS training writers
 ├── pyproject.toml              # Build config, dependencies, ruff, ty, and pytest settings

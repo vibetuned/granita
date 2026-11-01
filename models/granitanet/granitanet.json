@@ -180,5 +180,13 @@
     "litert",
     "onnx",
     "pt2"
-  ]
+  ],
+  "litert": {
+    "signature": "serving_default",
+    "inputs": {
+      "input": "args_0",
+      "context": "args_1"
+    },
+    "output": "output_0"
+  }
 }

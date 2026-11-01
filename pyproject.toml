@@ -26,7 +26,8 @@ data = [
 ]
 export = [
     "coremltools>=9.0",
-    "litert-torch>=0.10.0",
+    # Linux-only wheels, no sdist: the Core ML and ONNX exports still work on a Mac.
+    "litert-torch>=0.10.0; sys_platform == 'linux'",
     "onnx>=1.17.0",
     "onnxscript>=0.3.0",
     "onnxruntime>=1.20.0",
@@ -50,8 +51,9 @@ packages = ["src/granita"]
 
 [tool.uv.sources]
 musicset = { git = "https://github.com/vibetuned/musicset", branch = "main" }
-torch = [{ index = "pytorch-cu130" }]
-torchvision = [{ index = "pytorch-cu130" }]
+# The CUDA wheels on Linux (the training machine); macOS resolves PyPI's.
+torch = [{ index = "pytorch-cu130", marker = "sys_platform == 'linux'" }]
+torchvision = [{ index = "pytorch-cu130", marker = "sys_platform == 'linux'" }]
 
 [[tool.uv.index]]
 name = "pytorch-cu130"

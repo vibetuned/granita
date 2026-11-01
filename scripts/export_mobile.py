@@ -65,6 +65,20 @@ def _verify_litert(
     return float(np.max(np.abs(got - expected)))
 
 
+def _litert_names(tflite_path: Path, context_dim: int) -> dict[str, object]:
+    """The names an app feeds the tflite by: litert-torch's (``args_0``, ``args_1``,
+    ``output_0`` in ``serving_default``), not the sidecar's ``input`` and ``context``."""
+    from ai_edge_litert import interpreter as litert_interp  # type: ignore[import-untyped]
+
+    interp = litert_interp.Interpreter(model_path=str(tflite_path))
+    ((signature, io),) = interp.get_signature_list().items()
+    names = list(io["inputs"])
+    inputs = {"input": names[0]}
+    if context_dim:
+        inputs["context"] = names[1]
+    return {"signature": signature, "inputs": inputs, "output": io["outputs"][0]}
+
+
 def _verify_onnx(
     onnx_path: Path,
     model: torch.nn.Module,
@@ -149,6 +163,7 @@ def main() -> None:
 
     rows: list[list[str]] = []
     last_out: Path | None = None
+    litert_names: dict[str, object] | None = None
 
     for fmt in args.formats:
         if fmt == "coreml":
@@ -158,6 +173,7 @@ def main() -> None:
             out = export_litert(model, out_dir / f"{stem}.tflite")
             diff = _verify_litert(out, model, x, ctx)
             parity = f"{diff:.2e}"
+            litert_names = _litert_names(out, context_dim)
         elif fmt == "onnx":
             out = export_onnx(model, out_dir / f"{stem}.onnx", dynamic_batch=dynamic)
             diff = _verify_onnx(out, model, x, ctx)
@@ -188,7 +204,11 @@ def main() -> None:
             classes,
             model_name,
             context_dim=context_dim,
-            extra={"checkpoint": str(ckpt_path), "formats": list(args.formats)},
+            extra={
+                "checkpoint": str(ckpt_path),
+                "formats": list(args.formats),
+                **({"litert": litert_names} if litert_names else {}),
+            },
         )
         # Rename <stem>.model.json -> <stem>.json for a clean shared sidecar
         clean_sidecar = out_dir / f"{stem}.json"
