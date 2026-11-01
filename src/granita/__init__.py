@@ -1,13 +1,20 @@
-"""Granita: Lightweight Music Glyph and Symbol Classifier for OMR."""
+"""Granita: Lightweight Music Glyph and Symbol Classifier for OMR and score editors."""
 
 from granita.config import (
     CLASS_GROUPS,
     CLASS_TO_IDX,
     DEFAULT_CLASSES,
     IDX_TO_CLASS,
+    PAPER,
+    SOURCE_NAMES,
     TrainConfig,
 )
-from granita.infer.predictor import GranitaClassifier, Prediction
+from granita.infer.predictor import (
+    GranitaClassifier,
+    Prediction,
+    crop_glyph,
+    render_strokes,
+)
 from granita.models.backbone import (
     AVAILABLE_MODELS,
     MODEL_DESCRIPTIONS,
@@ -30,6 +37,8 @@ __all__ = [
     "DEFAULT_CLASSES",
     "IDX_TO_CLASS",
     "MODEL_DESCRIPTIONS",
+    "PAPER",
+    "SOURCE_NAMES",
     "AblationResult",
     "GranitaClassifier",
     "GranitaIFormer",
@@ -41,5 +50,7 @@ __all__ = [
     "TrainConfig",
     "count_parameters",
     "create_model",
+    "crop_glyph",
+    "render_strokes",
     "run_ablation",
 ]

@@ -28,7 +28,7 @@ AVAILABLE_MODELS: Final[tuple[str, ...]] = (
 
 MODEL_DESCRIPTIONS: Final[dict[str, str]] = {
     "granitanet": "Residual ConvNet with Squeeze-and-Excitation channel attention",
-    "tiny": "Ultra-compact 3-stage CNN (~40k params) for microsecond latency",
+    "tiny": "Ultra-compact 3-stage CNN (~78k params) for microsecond latency",
     "regla": "ReGLA (kakigori backbone): ELRF local convs + ReLU Gated Modulated Attention",
     "regla_t": "ReGLA-Tiny (depths 2-2-4-2, dims 32-64-128-256)",
     "regla_s": "ReGLA-Small (depths 2-2-6-2, dims 48-96-192-384)",
@@ -165,7 +165,7 @@ class GranitaNet(nn.Module):
 
 
 class GranitaTiny(nn.Module):
-    """Ultra-compact ConvNet (~40k parameters) for low-latency glyph inference."""
+    """Ultra-compact ConvNet (~78k parameters) for low-latency glyph inference."""
 
     def __init__(
         self,

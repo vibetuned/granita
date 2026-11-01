@@ -84,6 +84,12 @@ CLASS_GROUPS: Final[dict[str, str]] = {
 
 DEFAULT_INPUT_SIZE: Final[tuple[int, int]] = (32, 32)
 DEFAULT_IN_CHANNELS: Final[int] = 1
+PAPER: Final[int] = 255
+"""Background grey level of every training image (black ink on white paper)."""
+
+# Sample provenance codes written by ``musicset symbols`` as ``s_<split>`` in dataset.npz
+SOURCE_NAMES: Final[tuple[str, ...]] = ("font", "stroke", "crop")
+"""``font``: SMuFL glyph render, ``stroke``: stylus stroke template, ``crop``: real score crop."""
 
 
 @dataclass
@@ -98,6 +104,7 @@ class TrainConfig:
     lr: float = 1e-3
     weight_decay: float = 1e-4
     label_smoothing: float = 0.05
+    warmup_epochs: int = 2
     num_workers: int = 4
     seed: int = 42
     device: str = "auto"
