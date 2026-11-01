@@ -79,6 +79,27 @@ def test_create_all_available_models(model_name: str) -> None:
     assert out.shape == (2, len(DEFAULT_CLASSES))
 
 
+def test_granitanet_context_input() -> None:
+    torch.manual_seed(0)
+    model = GranitaNet(num_classes=5, in_channels=1, context_dim=9).eval()
+    x = torch.randn(3, 1, 32, 32)
+    ctx = torch.zeros(3, 9)
+    ctx[:, 0] = 1.0
+    ctx[:, 1] = torch.tensor([-0.5, 0.0, 0.5])
+    with torch.no_grad():
+        plain = model(x)
+        zeros = model(x, torch.zeros(3, 9))
+        with_ctx = model(x, ctx)
+    assert plain.shape == (3, 5) and torch.allclose(plain, zeros)  # no context == zero context
+    assert not torch.allclose(with_ctx, zeros)
+    assert model.context_dim == 9 and GranitaNet(num_classes=5).context_dim == 0
+    # the other families accept and ignore the argument
+    for name in ("tiny", "regla", "iformer", "lsnet"):
+        m = create_model(name, num_classes=5, context_dim=9).eval()
+        with torch.no_grad():
+            assert torch.allclose(m(x), m(x, ctx))
+
+
 def test_create_model_invalid() -> None:
     with pytest.raises(ValueError, match="Unknown model architecture"):
         create_model("invalid_model")

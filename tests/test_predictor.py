@@ -151,6 +151,43 @@ def test_load_strokes_json(tmp_path: Path) -> None:
     assert load_strokes_json(wrapped) == [[(1.0, 1.0)]]
 
 
+def test_predict_with_context() -> None:
+    from granita.context import SymbolContext, context_from_strokes, context_vector
+
+    torch.manual_seed(0)
+    model = GranitaNet(num_classes=3, in_channels=1, context_dim=9)
+    clf = GranitaClassifier(model=model, classes=["a", "b", "c"], device="cpu")
+    assert clf.context_dim == 9
+    img = np.full((32, 32), 255, dtype=np.uint8)
+    img[8:24, 14:18] = 0
+    ctx = SymbolContext(
+        y_staff=-3.0, x_measure=0.2, barline=1.0, note_dx=None, note_dy=None, width=0.5, height=2.0
+    )
+    as_dict = {
+        "y_staff": -3.0,
+        "x_measure": 0.2,
+        "barline": 1.0,
+        "note_dx": None,
+        "note_dy": None,
+        "width": 0.5,
+        "height": 2.0,
+    }
+    p_obj = clf.predict(img, context=ctx)
+    p_dict = clf.predict(img, context=as_dict)
+    p_vec = clf.predict(img, context=context_vector(ctx))
+    assert p_obj.top_k == p_dict.top_k == p_vec.top_k
+    assert clf.predict(img).label in ("a", "b", "c")  # unknown context is fine
+    strokes = [[(0.0, 0.0), (0.0, 40.0)]]
+    derived = context_from_strokes(strokes, 10.0, y_staff=-3.0, note_dx=1.0, note_dy=-2.0)
+    assert derived.height == 4.0 and derived.width == 0.0 and derived.note_dx == 1.0
+    assert clf.predict_strokes(strokes, staff_space=10.0, context=derived).label in ("a", "b", "c")
+    batch = clf.predict_batch([img, img], contexts=[ctx, None])
+    assert len(batch) == 2
+    # a context-free model ignores the context
+    plain = GranitaClassifier(GranitaNet(num_classes=3), ["a", "b", "c"])
+    assert plain.predict(img, context=ctx).top_k == plain.predict(img).top_k
+
+
 def test_from_checkpoint_round_trip(tmp_path: Path) -> None:
     model = GranitaTiny(num_classes=3)
     ckpt = tmp_path / "m.pt"

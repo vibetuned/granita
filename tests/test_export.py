@@ -40,6 +40,33 @@ def test_export_pt2_dynamic_batch(tmp_path: Path, model_name: str) -> None:
     assert program(torch.randn(1, 1, 32, 32)).shape == (1, 7)
 
 
+def test_export_with_context_input(tmp_path: Path) -> None:
+    from granita.models.backbone import GranitaNet
+    from granita.models.export import write_sidecar
+
+    model = GranitaNet(num_classes=4, context_dim=9).eval()
+    program = torch.export.load(str(export_pt2(model, tmp_path / "ctx.pt2"))).module()
+    x, ctx = torch.randn(3, 1, 32, 32), torch.randn(3, 9)
+    with torch.no_grad():
+        assert torch.allclose(program(x, ctx), model(x, ctx), atol=1e-5)
+    ort = pytest.importorskip("onnxruntime")
+    out_file = export_onnx(model, tmp_path / "ctx.onnx")
+    session = ort.InferenceSession(str(out_file), providers=["CPUExecutionProvider"])
+    assert [i.name for i in session.get_inputs()] == ["input", "context"]
+    (got,) = session.run(None, {"input": x.numpy(), "context": ctx.numpy()})
+    with torch.no_grad():
+        np.testing.assert_allclose(got, model(x, ctx).numpy(), atol=1e-4, rtol=1e-3)
+    sidecar = write_sidecar(out_file, ["a", "b", "c", "d"], "granitanet", context_dim=9)
+    import json
+
+    meta = json.loads(sidecar.read_text())
+    assert meta["context"]["features"][0] == "valid" and meta["classes"] == ["a", "b", "c", "d"]
+    assert (
+        write_sidecar(out_file, ["a"], "tiny")
+        and json.loads(sidecar.read_text())["context"] is None
+    )
+
+
 @pytest.mark.parametrize("model_name", FAMILIES)
 def test_export_onnx_matches_torch(tmp_path: Path, model_name: str) -> None:
     pytest.importorskip("onnx")

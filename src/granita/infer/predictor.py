@@ -17,18 +17,19 @@ from __future__ import annotations
 import argparse
 import json
 import math
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from itertools import pairwise
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import torch
 import torch.nn.functional as F
 from PIL import Image, ImageDraw, ImageFilter
 
-from granita.config import CLASS_GROUPS, DEFAULT_CLASSES, DEFAULT_INPUT_SIZE, PAPER
+from granita.config import CLASS_GROUPS, CONTEXT_DIM, DEFAULT_CLASSES, DEFAULT_INPUT_SIZE, PAPER
+from granita.context import SymbolContext, context_from_mapping, context_vector
 from granita.data.transforms import get_eval_transforms
 from granita.models.backbone import create_model
 
@@ -37,12 +38,33 @@ if TYPE_CHECKING:
 
 ImageLike = Image.Image | np.ndarray | torch.Tensor
 Stroke = Sequence[tuple[float, float]]
+ContextLike = SymbolContext | Mapping[str, Any] | np.ndarray | None
+"""Where the symbol sits: a ``SymbolContext``, its field dict, a ready vector, or unknown."""
 """One pen stroke as ``(x, y)`` points, in any consistent unit (pixels, mm, ...)."""
 
 # musicset draws stroke templates spanning 0.55-0.88 of the canvas with a pen
 # 0.055-0.115 canvas widths wide; these are the midpoints.
 DEFAULT_STROKE_FRACTION = 0.7
 DEFAULT_PEN_WIDTH = 0.085
+CANVAS_STAFF_SPACES = 8.8
+"""Staff spaces that fill the glyph canvas; musicset's size rule for real pen strokes
+(a HOMUS canvas of 150 pen units is ~8.8 staff spaces). Keep in sync with musicset.homus."""
+FRACTION_RANGE = (0.08, 0.90)
+
+
+def fraction_from_staff_space(strokes: Sequence[Stroke], staff_space: float) -> float:
+    """``fraction`` for :func:`render_strokes` from the editor's staff space (distance
+    between two staff lines in the strokes' units), so a drawing keeps its natural size."""
+    if staff_space <= 0:
+        raise ValueError(f"staff_space must be positive, got {staff_space}")
+    points = [(float(x), float(y)) for stroke in strokes for x, y in stroke]
+    if not points:
+        raise ValueError("fraction_from_staff_space needs at least one point")
+    xs = [p[0] for p in points]
+    ys = [p[1] for p in points]
+    span = max(max(xs) - min(xs), max(ys) - min(ys))
+    lo, hi = FRACTION_RANGE
+    return float(min(hi, max(lo, span / (CANVAS_STAFF_SPACES * staff_space))))
 
 
 def to_gray_uint8(image: ImageLike) -> np.ndarray:
@@ -229,6 +251,8 @@ class GranitaClassifier:
         self.classes = list(classes)
         self.class_to_idx = {name: i for i, name in enumerate(self.classes)}
         self.paper = paper
+        self.context_dim = int(getattr(model, "context_dim", 0))
+        """0 when the model ignores the conditioning vector."""
         self.transform = get_eval_transforms()
 
     @classmethod
@@ -250,10 +274,25 @@ class GranitaClassifier:
         classes = list(ckpt.get("classes", DEFAULT_CLASSES))
         model_name = ckpt.get("model_name", "granitanet")
 
-        model = create_model(model_name=model_name, num_classes=len(classes))
+        model = create_model(
+            model_name=model_name,
+            num_classes=len(classes),
+            context_dim=int(ckpt.get("context_dim", 0)),
+        )
         model.load_state_dict(ckpt["model_state_dict"])
 
         return cls(model=model, classes=classes, device=target_device)
+
+    def _context_tensor(self, contexts: Sequence[ContextLike] | None, n: int) -> torch.Tensor:
+        rows = []
+        for ctx in contexts if contexts is not None else [None] * n:
+            if ctx is None or isinstance(ctx, SymbolContext):
+                rows.append(context_vector(ctx))
+            elif isinstance(ctx, np.ndarray):
+                rows.append(np.asarray(ctx, dtype=np.float32).reshape(CONTEXT_DIM))
+            else:
+                rows.append(context_vector(context_from_mapping(ctx)))
+        return torch.from_numpy(np.stack(rows)).to(self.device)
 
     def _prepare_tensor(self, image: ImageLike) -> torch.Tensor:
         """Convert an isolated glyph into a normalized ``(1, 1, H, W)`` tensor.
@@ -268,8 +307,10 @@ class GranitaClassifier:
         return self.transform(tensor).unsqueeze(0).to(self.device)
 
     @torch.no_grad()
-    def _predict_tensor(self, batch: torch.Tensor, top_k: int) -> list[Prediction]:
-        logits = self.model(batch)
+    def _predict_tensor(
+        self, batch: torch.Tensor, top_k: int, contexts: Sequence[ContextLike] | None = None
+    ) -> list[Prediction]:
+        logits = self.model(batch, self._context_tensor(contexts, batch.shape[0]))
         probs = F.softmax(logits, dim=-1)
         k = min(top_k, len(self.classes))
         top_probs, top_indices = probs.topk(k, dim=-1)
@@ -292,36 +333,68 @@ class GranitaClassifier:
             )
         return results
 
-    def predict(self, image: ImageLike, top_k: int = 5) -> Prediction:
-        """Predict the symbol class for a single isolated glyph image."""
-        return self._predict_tensor(self._prepare_tensor(image), top_k)[0]
+    def predict(
+        self, image: ImageLike, top_k: int = 5, *, context: ContextLike = None
+    ) -> Prediction:
+        """Predict the symbol class for a single isolated glyph image.
 
-    def predict_batch(self, images: Sequence[ImageLike], top_k: int = 5) -> list[Prediction]:
+        ``context`` says where in the score the symbol sits (see
+        :mod:`granita.context`); models trained without one ignore it.
+        """
+        return self._predict_tensor(self._prepare_tensor(image), top_k, [context])[0]
+
+    def predict_batch(
+        self,
+        images: Sequence[ImageLike],
+        top_k: int = 5,
+        *,
+        contexts: Sequence[ContextLike] | None = None,
+    ) -> list[Prediction]:
         """Predict classes for a batch of isolated glyph images."""
         if not images:
             return []
         batch = torch.cat([self._prepare_tensor(img) for img in images], dim=0)
-        return self._predict_tensor(batch, top_k)
+        return self._predict_tensor(batch, top_k, contexts)
 
     def predict_strokes(
         self,
         strokes: Sequence[Stroke],
         top_k: int = 5,
         *,
-        fraction: float = DEFAULT_STROKE_FRACTION,
+        fraction: float | None = DEFAULT_STROKE_FRACTION,
+        staff_space: float | None = None,
         pen_width: float = DEFAULT_PEN_WIDTH,
         brush: bool = False,
+        context: ContextLike = None,
     ) -> Prediction:
-        """Classify stylus strokes drawn in an editor (see :func:`render_strokes`)."""
+        """Classify stylus strokes drawn in an editor (see :func:`render_strokes`).
+
+        Pass ``staff_space`` (pixels between two staff lines) so the drawing
+        keeps its natural size; ``fraction`` is used only when it is absent.
+        ``context`` is where the mark was drawn (:func:`granita.context.context_from_strokes`).
+        """
         size = DEFAULT_INPUT_SIZE[0]
+        if staff_space is not None:
+            fraction = fraction_from_staff_space(strokes, staff_space)
+        if fraction is None:
+            fraction = DEFAULT_STROKE_FRACTION
         glyph = render_strokes(
             strokes, size, fraction=fraction, pen_width=pen_width, brush=brush, paper=self.paper
         )
-        return self.predict(glyph, top_k=top_k)
+        return self.predict(glyph, top_k=top_k, context=context)
 
-    def predict_box(self, page: ImageLike, bbox: Sequence[float], top_k: int = 5) -> Prediction:
+    def predict_box(
+        self,
+        page: ImageLike,
+        bbox: Sequence[float],
+        top_k: int = 5,
+        *,
+        context: ContextLike = None,
+    ) -> Prediction:
         """Classify the glyph inside ``bbox`` on a page image (see :func:`crop_glyph`)."""
-        return self.predict(crop_glyph(page, bbox, DEFAULT_INPUT_SIZE[0]), top_k=top_k)
+        return self.predict(
+            crop_glyph(page, bbox, DEFAULT_INPUT_SIZE[0]), top_k=top_k, context=context
+        )
 
 
 def load_strokes_json(path: str | Path) -> list[list[tuple[float, float]]]:

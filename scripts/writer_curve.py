@@ -35,7 +35,7 @@ def predict(model: torch.nn.Module, x: np.ndarray, device: str) -> np.ndarray:
     ds = SymbolNpzDataset(x, np.zeros(len(x), dtype=np.int64), [], transform=get_eval_transforms())
     preds: list[int] = []
     model.eval()
-    for images, _ in make_loader(ds, 512, shuffle=False, num_workers=0):
+    for images, _, _ in make_loader(ds, 512, shuffle=False, num_workers=0):
         preds.extend(model(images.to(device)).argmax(1).cpu().tolist())
     return np.array(preds, dtype=np.int64)
 

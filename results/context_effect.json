@@ -1,0 +1,56 @@
+{
+  "with context": {
+    "top1": 0.9854469854469855,
+    "macro_f1": 0.986208189474092,
+    "source_accuracy": {
+      "font": 0.9983197983758051,
+      "stroke": 0.986449864498645,
+      "crop": 0.9976894639556377,
+      "hand": 0.8763157894736842
+    },
+    "pair_errors": {
+      "augmentationDot|articStaccatoAbove": 23,
+      "fing1|barlineSingle": 7,
+      "articStaccatissimoAbove|barlineSingle": 2,
+      "noteWhole|augmentationDot": 7,
+      "restQuarter|accidentalNatural": 7,
+      "noteQuarter|noteHalf": 27
+    }
+  },
+  "context masked": {
+    "top1": 0.9780759780759781,
+    "macro_f1": 0.9792390118120795,
+    "source_accuracy": {
+      "font": 0.9948660505927378,
+      "stroke": 0.9701897018970189,
+      "crop": 0.9930683918669131,
+      "hand": 0.8460526315789474
+    },
+    "pair_errors": {
+      "augmentationDot|articStaccatoAbove": 67,
+      "fing1|barlineSingle": 21,
+      "articStaccatissimoAbove|barlineSingle": 10,
+      "noteWhole|augmentationDot": 18,
+      "restQuarter|accidentalNatural": 13,
+      "noteQuarter|noteHalf": 27
+    }
+  },
+  "context-free model": {
+    "top1": 0.9787689787689787,
+    "macro_f1": 0.9799112348261872,
+    "source_accuracy": {
+      "font": 0.9943993279193504,
+      "stroke": 0.9769647696476965,
+      "crop": 0.9953789279112755,
+      "hand": 0.8467105263157895
+    },
+    "pair_errors": {
+      "augmentationDot|articStaccatoAbove": 67,
+      "fing1|barlineSingle": 21,
+      "articStaccatissimoAbove|barlineSingle": 7,
+      "noteWhole|augmentationDot": 17,
+      "restQuarter|accidentalNatural": 13,
+      "noteQuarter|noteHalf": 26
+    }
+  }
+}

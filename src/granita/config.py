@@ -144,6 +144,20 @@ DEFAULT_IN_CHANNELS: Final[int] = 1
 PAPER: Final[int] = 255
 """Background grey level of every training image (black ink on white paper)."""
 
+# Conditioning vector: where the symbol sits in the score, mirrored from musicset.context
+CONTEXT_FEATURES: Final[tuple[str, ...]] = (
+    "valid",
+    "y_staff",
+    "x_measure",
+    "barline",
+    "has_note",
+    "note_dx",
+    "note_dy",
+    "width",
+    "height",
+)
+CONTEXT_DIM: Final[int] = len(CONTEXT_FEATURES)
+
 # Sample provenance codes written by ``musicset symbols`` as ``s_<split>`` in dataset.npz
 SOURCE_NAMES: Final[tuple[str, ...]] = ("font", "stroke", "crop", "hand")
 """``font``: SMuFL glyph render, ``stroke``: stylus stroke template, ``crop``: real score
@@ -163,6 +177,10 @@ class TrainConfig:
     weight_decay: float = 1e-4
     label_smoothing: float = 0.05
     warmup_epochs: int = 2
+    context_dim: int = 0
+    """0 trains without the conditioning vector; CONTEXT_DIM uses it."""
+    context_dropout: float = 0.25
+    """Share of training samples whose context is zeroed so the model also works without one."""
     num_workers: int = 4
     seed: int = 42
     device: str = "auto"

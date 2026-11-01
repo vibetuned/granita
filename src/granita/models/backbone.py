@@ -114,10 +114,13 @@ class GranitaNet(nn.Module):
         num_classes: int = len(DEFAULT_CLASSES),
         in_channels: int = DEFAULT_IN_CHANNELS,
         dropout: float = 0.2,
+        context_dim: int = 0,
+        context_hidden: int = 64,
     ) -> None:
         super().__init__()
         self.num_classes = num_classes
         self.in_channels = in_channels
+        self.context_dim = context_dim
 
         # Stem: (B, 1, 32, 32) -> (B, 32, 32, 32)
         self.stem = nn.Sequential(
@@ -144,24 +147,39 @@ class GranitaNet(nn.Module):
             ResidualBlock(256),
         )
 
+        # Conditioning vector (where the symbol sits in the score), joined to the pooled features
+        self.context: nn.Module | None = (
+            nn.Sequential(
+                nn.Linear(context_dim, context_hidden),
+                nn.GELU(),
+                nn.Linear(context_hidden, context_hidden),
+                nn.GELU(),
+            )
+            if context_dim > 0
+            else None
+        )
+
         # Classifier head
         self.pool = nn.AdaptiveAvgPool2d(1)
         self.head = nn.Sequential(
-            nn.Flatten(),
             nn.Dropout(p=dropout),
-            nn.Linear(256, 128),
+            nn.Linear(256 + (context_hidden if context_dim > 0 else 0), 128),
             nn.GELU(),
             nn.Dropout(p=dropout * 0.5),
             nn.Linear(128, num_classes),
         )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, context: torch.Tensor | None = None) -> torch.Tensor:
         out = self.stem(x)
         out = self.stage1(out)
         out = self.stage2(out)
         out = self.stage3(out)
-        out = self.pool(out)
-        return self.head(out)
+        feats = self.pool(out).flatten(1)
+        if self.context is not None:
+            if context is None:
+                context = feats.new_zeros(feats.shape[0], self.context_dim)
+            feats = torch.cat([feats, self.context(context)], dim=1)
+        return self.head(feats)
 
 
 class GranitaTiny(nn.Module):
@@ -196,7 +214,7 @@ class GranitaTiny(nn.Module):
             nn.Linear(96, num_classes),
         )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, context: torch.Tensor | None = None) -> torch.Tensor:
         return self.classifier(self.features(x))
 
 
@@ -205,11 +223,21 @@ def create_model(
     num_classes: int = len(DEFAULT_CLASSES),
     in_channels: int = DEFAULT_IN_CHANNELS,
     dropout: float = 0.2,
+    context_dim: int = 0,
 ) -> nn.Module:
-    """Factory function for creating Granita classification models."""
+    """Factory function for creating Granita classification models.
+
+    ``context_dim > 0`` adds the conditioning-vector input; only ``granitanet``
+    uses it, the other backbones accept and ignore the argument.
+    """
     name = model_name.lower()
     if name in ("granitanet", "default"):
-        return GranitaNet(num_classes=num_classes, in_channels=in_channels, dropout=dropout)
+        return GranitaNet(
+            num_classes=num_classes,
+            in_channels=in_channels,
+            dropout=dropout,
+            context_dim=context_dim,
+        )
     if name in ("granitatiny", "tiny", "lenet"):
         return GranitaTiny(num_classes=num_classes, in_channels=in_channels)
     if name in ("regla", "regla_t", "regla_s"):

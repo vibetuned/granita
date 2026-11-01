@@ -200,6 +200,8 @@ def run_ablation(
                 weight_decay=base_config.weight_decay,
                 label_smoothing=base_config.label_smoothing,
                 warmup_epochs=base_config.warmup_epochs,
+                context_dim=base_config.context_dim,
+                context_dropout=base_config.context_dropout,
                 num_workers=base_config.num_workers,
                 seed=base_config.seed,
                 device=device,
@@ -210,7 +212,11 @@ def run_ablation(
             train_time = time.time() - t0
 
         ckpt = torch.load(best_ckpt_path, map_location=device, weights_only=True)
-        model = create_model(model_name=model_name, num_classes=len(classes))
+        model = create_model(
+            model_name=model_name,
+            num_classes=len(classes),
+            context_dim=int(ckpt.get("context_dim", 0)),
+        )
         model.load_state_dict(ckpt["model_state_dict"])
         model.to(device)
 

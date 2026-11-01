@@ -31,17 +31,27 @@ def _tiny_archive(folder: Path) -> Path:
     xt, yt, st = make(64)
     xv, yv, sv = make(16)
     xs, ys, ss = make(16)
+
+    def ctx(y: np.ndarray) -> np.ndarray:  # class 1 sits above the staff, class 0 on it
+        c = np.zeros((len(y), 9), dtype=np.float32)
+        c[:, 0] = 1.0
+        c[:, 1] = np.where(y == 1, -0.8, 0.0)
+        return c
+
     np.savez(
         folder / "dataset.npz",
         x_train=xt,
         y_train=yt,
         s_train=st,
+        c_train=ctx(yt),
         x_val=xv,
         y_val=yv,
         s_val=sv,
+        c_val=ctx(yv),
         x_test=xs,
         y_test=ys,
         s_test=ss,
+        c_test=ctx(ys),
         classes=np.array(["articTenutoAbove", "fing1"]),
     )
     return folder / "dataset.npz"
@@ -65,10 +75,11 @@ def test_run_training_and_ablation(tmp_path: Path) -> None:
     cfg = TrainConfig(
         data_path=npz,
         output_dir=tmp_path / "run",
-        model_name="tiny",
+        model_name="granitanet",
         batch_size=16,
         epochs=2,
         warmup_epochs=1,
+        context_dim=9,
         num_workers=0,
         device="cpu",
     )
@@ -86,14 +97,18 @@ def test_run_training_and_ablation(tmp_path: Path) -> None:
     assert "optimizer_state_dict" not in best_ckpt and "optimizer_state_dict" in last_ckpt
     assert best_ckpt["classes"] == ["articTenutoAbove", "fing1"]
     assert best_ckpt["config"]["warmup_epochs"] == 1
+    assert best_ckpt["context_dim"] == 9 and best_ckpt["context_features"][0] == "valid"
+    assert history[0]["val_top1_noctx"] is not None
 
     from safetensors import safe_open
 
     with safe_open(str(tmp_path / "run" / "best_model.safetensors"), "pt") as f:
         meta = f.metadata()
-    assert meta["model_name"] == "tiny" and json.loads(meta["classes"]) == best_ckpt["classes"]
+    assert meta["model_name"] == "granitanet"
+    assert json.loads(meta["classes"]) == best_ckpt["classes"]
 
     clf = GranitaClassifier.from_checkpoint(best, device="cpu")
+    assert clf.context_dim == 9
     assert clf.predict(np.full((32, 32), 255, dtype=np.uint8)).label in clf.classes
 
     abl_cfg = TrainConfig(

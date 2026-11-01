@@ -311,7 +311,7 @@ class GranitaReGLA(nn.Module):
             if m.bias is not None:
                 nn.init.zeros_(m.bias)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, context: torch.Tensor | None = None) -> torch.Tensor:
         out = self.stem(x)
         for stage in self.stages:
             out = stage(out)

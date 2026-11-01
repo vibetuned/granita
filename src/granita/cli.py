@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 
 import torch
 from tabulate import tabulate
 
-from granita.config import CLASS_GROUPS, DEFAULT_CLASSES, TrainConfig
+from granita.config import CLASS_GROUPS, CONTEXT_DIM, DEFAULT_CLASSES, TrainConfig
 from granita.data.dataset import SPLITS, load_split_dataset, make_loader
 from granita.eval.evaluate import evaluate_model, format_metrics_table
 from granita.infer.predictor import (
@@ -23,7 +24,7 @@ from granita.models.backbone import (
     count_parameters,
     create_model,
 )
-from granita.models.export import export_onnx, export_pt2, export_torchscript
+from granita.models.export import export_onnx, export_pt2, export_torchscript, write_sidecar
 from granita.train.ablation import DEFAULT_ABLATION_MODELS, run_ablation
 from granita.train.trainer import resolve_device, run_training
 
@@ -90,6 +91,17 @@ def _training_args(p: argparse.ArgumentParser, epochs: int, output_dir: str) -> 
     p.add_argument("--num-workers", type=int, default=2)
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--device", type=str, default="auto")
+    p.add_argument(
+        "--context",
+        action="store_true",
+        help="feed the conditioning vector (where the symbol sits in the score) to the model",
+    )
+    p.add_argument(
+        "--context-dropout",
+        type=float,
+        default=0.25,
+        help="share of training samples whose context is zeroed (with --context)",
+    )
 
 
 def _train_config(args: argparse.Namespace, model_name: str) -> TrainConfig:
@@ -103,6 +115,8 @@ def _train_config(args: argparse.Namespace, model_name: str) -> TrainConfig:
         weight_decay=args.weight_decay,
         label_smoothing=args.label_smoothing,
         warmup_epochs=args.warmup_epochs,
+        context_dim=CONTEXT_DIM if args.context else 0,
+        context_dropout=args.context_dropout,
         num_workers=args.num_workers,
         seed=args.seed,
         device=args.device,
@@ -160,13 +174,18 @@ def cmd_eval(args: argparse.Namespace) -> None:
 
     ckpt = torch.load(args.checkpoint, map_location=device, weights_only=True)
     model_name = ckpt.get("model_name", "granitanet")
-    model = create_model(model_name=model_name, num_classes=len(classes))
+    context_dim = int(ckpt.get("context_dim", 0))
+    model = create_model(model_name=model_name, num_classes=len(classes), context_dim=context_dim)
     model.load_state_dict(ckpt["model_state_dict"])
     model.to(device)
 
     metrics = evaluate_model(model, loader, classes=classes, device=device)
     print(f"# {model_name} on the {args.split} split of {args.data} ({len(dataset)} samples)\n")
     print(format_metrics_table(metrics, classes, confusions=args.confusions))
+    if context_dim:
+        masked = evaluate_model(model, loader, classes=classes, device=device, mask_context=True)
+        print("\n# Same model with the context masked (all zeros)\n")
+        print(format_metrics_table(masked, classes, confusions=args.confusions))
 
 
 def parser_infer(p: argparse.ArgumentParser) -> None:
@@ -183,6 +202,12 @@ def parser_infer(p: argparse.ArgumentParser) -> None:
         help="strokes only: glyph span as a fraction of the canvas (small dot ~0.3, dynamic ~0.8)",
     )
     p.add_argument(
+        "--staff-space",
+        type=float,
+        default=None,
+        help="strokes only: pixels between two staff lines, which fixes the natural size",
+    )
+    p.add_argument(
         "--pen-width",
         type=float,
         default=DEFAULT_PEN_WIDTH,
@@ -190,6 +215,12 @@ def parser_infer(p: argparse.ArgumentParser) -> None:
     )
     p.add_argument(
         "--brush", action="store_true", help="strokes only: pressure-like brush instead of a pen"
+    )
+    p.add_argument(
+        "--context",
+        type=str,
+        default=None,
+        help="JSON with y_staff, x_measure, barline, note_dx, note_dy, width, height",
     )
     p.add_argument("--device", type=str, default="auto")
     p.add_argument("--top-k", type=int, default=5)
@@ -200,17 +231,20 @@ def cmd_infer(args: argparse.Namespace) -> None:
     from PIL import Image
 
     classifier = GranitaClassifier.from_checkpoint(args.checkpoint, device=args.device)
+    context = json.loads(args.context) if args.context else None
     if args.strokes:
         pred = classifier.predict_strokes(
             load_strokes_json(args.strokes),
             top_k=args.top_k,
             fraction=args.fraction,
+            staff_space=args.staff_space,
             pen_width=args.pen_width,
             brush=args.brush,
+            context=context,
         )
     else:
         with Image.open(args.image) as img:
-            pred = classifier.predict(img, top_k=args.top_k)
+            pred = classifier.predict(img, top_k=args.top_k, context=context)
 
     conf_pct = pred.confidence * 100
     print(f"Prediction: {pred.label} (confidence: {conf_pct:.2f}%, group: {pred.group})")
@@ -232,6 +266,11 @@ def parser_export(p: argparse.ArgumentParser) -> None:
     p.add_argument(
         "--static-batch", action="store_true", help="fix the batch size to 1 instead of dynamic"
     )
+    p.add_argument(
+        "--sidecar",
+        action="store_true",
+        help="also write <output>.json with classes, input spec and stroke rasterisation rules",
+    )
 
 
 def cmd_export(args: argparse.Namespace) -> None:
@@ -240,7 +279,8 @@ def cmd_export(args: argparse.Namespace) -> None:
     classes = ckpt.get("classes", DEFAULT_CLASSES)
     model_name = ckpt.get("model_name", "granitanet")
 
-    model = create_model(model_name=model_name, num_classes=len(classes))
+    context_dim = int(ckpt.get("context_dim", 0))
+    model = create_model(model_name=model_name, num_classes=len(classes), context_dim=context_dim)
     model.load_state_dict(ckpt["model_state_dict"])
 
     out = Path(args.output)
@@ -252,6 +292,15 @@ def cmd_export(args: argparse.Namespace) -> None:
     else:
         export_torchscript(model, out)
     print(f"[*] Exported {model_name} as {args.format} to {out}")
+    if args.sidecar:
+        sidecar = write_sidecar(
+            out,
+            list(classes),
+            model_name,
+            context_dim=context_dim,
+            extra={"checkpoint": args.checkpoint},
+        )
+        print(f"[*] Wrote {sidecar}")
 
 
 def main() -> None:

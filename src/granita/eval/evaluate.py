@@ -111,14 +111,17 @@ def metrics_from_predictions(
 @torch.no_grad()
 def evaluate_model(
     model: nn.Module,
-    dataloader: DataLoader[tuple[torch.Tensor, int]],
+    dataloader: DataLoader[tuple[torch.Tensor, torch.Tensor, int]],
     classes: list[str],
     device: str | torch.device = "cpu",
+    mask_context: bool = False,
 ) -> EvalMetrics:
     """Compute comprehensive classification metrics on a dataset.
 
     Per-source accuracy is reported when the loader's dataset carries a
     ``sources`` array and iterates in order (no random sampler).
+    ``mask_context`` zeroes every conditioning vector, to measure what the
+    context adds.
     """
     model.eval()
     num_classes = len(classes)
@@ -127,11 +130,12 @@ def evaluate_model(
     all_targets: list[int] = []
     top3_correct = 0
 
-    for images, targets in dataloader:
+    for images, contexts, targets in dataloader:
         images = images.to(device)
+        contexts = torch.zeros_like(contexts) if mask_context else contexts
         targets = targets.to(device)
 
-        logits = model(images)
+        logits = model(images, contexts.to(device))
         _, preds = logits.max(1)
 
         k = min(3, num_classes)

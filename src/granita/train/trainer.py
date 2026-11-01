@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 import torch
 import torch.nn as nn
 
-from granita.config import TrainConfig
+from granita.config import CONTEXT_FEATURES, TrainConfig
 from granita.data.dataset import load_dataset_from_path
 from granita.eval.evaluate import EvalMetrics, evaluate_model
 from granita.models.backbone import create_model
@@ -50,14 +50,19 @@ def build_scheduler(
 
 def train_one_epoch(
     model: nn.Module,
-    dataloader: DataLoader[tuple[torch.Tensor, int]],
+    dataloader: DataLoader[tuple[torch.Tensor, torch.Tensor, int]],
     optimizer: torch.optim.Optimizer,
     criterion: nn.Module,
     device: str | torch.device,
     scaler: torch.amp.GradScaler | None = None,
     scheduler: torch.optim.lr_scheduler.LRScheduler | None = None,
+    context_dropout: float = 0.0,
 ) -> tuple[float, float]:
-    """Execute one training epoch (``scheduler`` is stepped per batch)."""
+    """Execute one training epoch (``scheduler`` is stepped per batch).
+
+    ``context_dropout`` zeroes the conditioning vector of that share of the
+    samples, so the model also works when the editor sends no context.
+    """
     model.train()
     total_loss = 0.0
     correct = 0
@@ -65,15 +70,19 @@ def train_one_epoch(
 
     use_amp = scaler is not None and torch.cuda.is_available() and "cuda" in str(device)
 
-    for images, targets in dataloader:
+    for images, contexts, targets in dataloader:
         images = images.to(device, non_blocking=True)
+        contexts = contexts.to(device, non_blocking=True)
         targets = targets.to(device, non_blocking=True)
+        if context_dropout > 0:
+            drop = torch.rand(contexts.shape[0], device=contexts.device) < context_dropout
+            contexts = contexts.masked_fill(drop[:, None], 0.0)
 
         optimizer.zero_grad(set_to_none=True)
 
         if use_amp and scaler is not None:
             with torch.amp.autocast(device_type="cuda"):
-                outputs = model(images)
+                outputs = model(images, contexts)
                 loss = criterion(outputs, targets)
             scaler.scale(loss).backward()
             scaler.unscale_(optimizer)
@@ -81,7 +90,7 @@ def train_one_epoch(
             scaler.step(optimizer)
             scaler.update()
         else:
-            outputs = model(images)
+            outputs = model(images, contexts)
             loss = criterion(outputs, targets)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
@@ -125,6 +134,8 @@ def save_checkpoint(
         "val_top1": metrics.top1_accuracy,
         "val_macro_f1": metrics.macro_f1,
         "val_source_accuracy": dict(metrics.source_accuracy),
+        "context_dim": config.context_dim,
+        "context_features": list(CONTEXT_FEATURES) if config.context_dim else [],
         "config": config_dict(config),
     }
     if optimizer is not None:
@@ -167,10 +178,15 @@ def run_training(config: TrainConfig) -> Path:
     print(f"[*] Loaded dataset: {n_train} train, {n_val} val, {len(classes)} classes")
 
     # 2. Build model
-    model = create_model(model_name=config.model_name, num_classes=len(classes))
+    model = create_model(
+        model_name=config.model_name, num_classes=len(classes), context_dim=config.context_dim
+    )
     model.to(device)
     num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    print(f"[*] Created {config.model_name} with {num_params:,} trainable parameters")
+    print(
+        f"[*] Created {config.model_name} with {num_params:,} trainable parameters"
+        + (f", context vector of {config.context_dim}" if config.context_dim else "")
+    )
 
     # 3. Setup optimizer and scheduler
     optimizer = torch.optim.AdamW(
@@ -201,15 +217,23 @@ def run_training(config: TrainConfig) -> Path:
             device=device,
             scaler=scaler,
             scheduler=scheduler,
+            context_dropout=config.context_dropout if config.context_dim else 0.0,
         )
 
-        # Validation
+        # Validation (with the context, and once more without it when the model takes one)
         val_metrics = evaluate_model(model, val_loader, classes=classes, device=device)
+        noctx = (
+            evaluate_model(model, val_loader, classes=classes, device=device, mask_context=True)
+            if config.context_dim
+            else None
+        )
         elapsed = time.time() - epoch_start
 
         sources = " ".join(
             f"{name}={acc * 100:.1f}%" for name, acc in val_metrics.source_accuracy.items()
         )
+        if noctx is not None:
+            sources += f" | no-ctx {noctx.top1_accuracy * 100:.2f}%"
         print(
             f"Epoch [{epoch:02d}/{config.epochs:02d}] "
             f"Train Loss: {train_loss:.4f} Acc: {train_acc * 100:.2f}% | "
@@ -228,6 +252,8 @@ def run_training(config: TrainConfig) -> Path:
                 "val_top3": val_metrics.top3_accuracy,
                 "val_macro_f1": val_metrics.macro_f1,
                 "val_source_accuracy": dict(val_metrics.source_accuracy),
+                "val_top1_noctx": None if noctx is None else noctx.top1_accuracy,
+                "val_source_accuracy_noctx": {} if noctx is None else dict(noctx.source_accuracy),
                 "lr": float(optimizer.param_groups[0]["lr"]),
                 "seconds": elapsed,
             }

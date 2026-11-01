@@ -93,3 +93,31 @@ than samples per writer (HOMUS has only 4-8 per class per writer). Simple distin
 
 Rule of thumb for collecting the 29 classes with no real strokes: 10 writers gives a usable
 first model (~70%), 40 a good one (~80%), and every doubling after that is worth ~5 points.
+
+## 6. The conditioning vector (`granitanet_v5_ctx/`, `granitanet_v5_noctx/`, `context_effect.md`)
+
+Nine features in staff spaces (`musicset.context`): valid flag, height above or below the
+staff's middle line, position in the measure, distance to the nearest barline, whether a
+notehead is near and its offset, width and height. Crops carry their real page context; synthetic
+and HOMUS samples get one drawn from the training crops of their class with probability 0.7
+(16 classes have no crops and never get one); 25% of training contexts are zeroed so the model
+also works without one. Same data, same recipe; the twin has no context input.
+
+| test split, 15,873 samples (8,853 with a known context) | with context | context masked | context-free twin |
+|---|---|---|---|
+| top-1 | **98.54%** | 97.81% | 97.88% |
+| hand (held-out writers) | **87.63%** | 84.61% | 84.67% |
+| stroke | 98.64% | 97.02% | 97.70% |
+| crop | 99.77% | 99.31% | 99.54% |
+| augmentation dot vs. staccato errors | **23** | 67 | 67 |
+| fing1 vs. barline errors | **7** | 21 | 21 |
+| staccatissimo vs. barline errors | 2 | 10 | 7 |
+| whole note vs. augmentation dot errors | 7 | 18 | 17 |
+| quarter rest vs. natural errors | 7 | 13 | 13 |
+| quarter vs. half note errors | 27 | 27 | 26 |
+
+The context removes two thirds of the shape-identical errors and lifts held-out handwriting by
+3 points, while the masked column shows it costs nothing when absent. Quarter versus half note
+does not move: that is a visual distinction (filled head), not a positional one. Only 56% of test
+samples, and 28% of the handwritten ones, had a context at all, so these gains are a lower bound
+for an editor that always sends one.
