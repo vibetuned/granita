@@ -1,0 +1,23 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info/
+
+# Virtual environments
+.venv/
+
+# Caches
+.ruff_cache/
+.ty_cache/
+.pytest_cache/
+
+# Data and Models
+data/
+checkpoints/
+runs/
+*.onnx
+*.safetensors
+*.pt

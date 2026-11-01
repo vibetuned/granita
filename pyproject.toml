@@ -1,0 +1,67 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "granita"
+version = "0.1.0"
+description = "Lightweight music symbol and glyph classifier for Optical Music Recognition (OMR)"
+readme = "README.md"
+license = { text = "AGPL-3.0-only" }
+authors = [{ name = "pedrogasg", email = "pedrogas_g@hotmail.com" }]
+requires-python = ">=3.13"
+dependencies = [
+    "numpy>=2.0.0",
+    "pillow>=11.0.0",
+    "safetensors>=0.4.0",
+    "tabulate>=0.9.0",
+    "torch>=2.7.0",
+    "torchvision>=0.22.0",
+    "tqdm>=4.67.0",
+]
+
+[project.optional-dependencies]
+export = [
+    "onnx>=1.16.0",
+]
+
+[project.scripts]
+granita = "granita.cli:main"
+granita-train = "granita.train.trainer:main"
+granita-eval = "granita.eval.evaluate:main"
+granita-infer = "granita.infer.predictor:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.0",
+    "ruff>=0.15.0",
+    "ty>=0.0.18",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/granita"]
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cu130" }]
+torchvision = [{ index = "pytorch-cu130" }]
+
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.ty.environment]
+python-version = "3.13"
+
+[tool.ty.rules]
+invalid-mutable-override = "ignore"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
