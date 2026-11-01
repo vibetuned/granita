@@ -19,13 +19,14 @@ import json
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
+from itertools import pairwise
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
 import torch
 import torch.nn.functional as F
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFilter
 
 from granita.config import CLASS_GROUPS, DEFAULT_CLASSES, DEFAULT_INPUT_SIZE, PAPER
 from granita.data.transforms import get_eval_transforms
@@ -125,12 +126,22 @@ def crop_glyph(
     )
 
 
+def _segment_widths(pts: Sequence[tuple[float, float]], width: int) -> list[int]:
+    """Pressure-like pen widths per segment: wide where the pen moves slowly, narrow where fast."""
+    lengths = [math.dist(a, b) for a, b in pairwise(pts)]
+    ref = sorted(lengths)[len(lengths) // 2] if lengths else 0.0
+    if ref <= 1e-9:
+        return [width] * len(lengths)
+    return [max(1, round(width * min(1.3, max(0.55, 1.3 - 0.5 * (ln / ref))))) for ln in lengths]
+
+
 def render_strokes(
     strokes: Sequence[Stroke],
     size: int = DEFAULT_INPUT_SIZE[0],
     *,
     fraction: float = DEFAULT_STROKE_FRACTION,
     pen_width: float = DEFAULT_PEN_WIDTH,
+    brush: bool = False,
     canvas: int | None = None,
     paper: int = PAPER,
 ) -> np.ndarray:
@@ -140,6 +151,9 @@ def render_strokes(
     its longer side spans ``fraction`` of the canvas; the pen is ``pen_width``
     canvas widths wide with round caps. Drawn at ``canvas`` pixels (default
     ``max(96, 3 * size)`` like musicset) and downsampled to ``size``.
+
+    ``brush`` imitates a pressure brush instead of a uniform pen: each segment's
+    width follows the pen speed (slow = wide) and the result gets a soft edge.
 
     Absolute size is lost when normalising by the bounding box, so pass the
     glyph's size relative to its surroundings as ``fraction`` when the editor
@@ -155,7 +169,6 @@ def render_strokes(
     scale = (canvas_px * fraction) / span if span > 1e-9 else 0.0
     cx, cy = 0.5 * (xmin + xmax), 0.5 * (ymin + ymax)
     width = max(2, round(canvas_px * pen_width))
-    r = width * 0.45
 
     img = Image.new("L", (canvas_px, canvas_px), paper)
     draw = ImageDraw.Draw(img)
@@ -166,10 +179,21 @@ def render_strokes(
         ]
         if not pts:
             continue
-        if len(pts) >= 2:
-            draw.line(pts, fill=0, width=width, joint="curve")
+        if brush and len(pts) >= 2:
+            widths = _segment_widths(pts, width)
+            for (a, b), w in zip(pairwise(pts), widths, strict=True):
+                draw.line([a, b], fill=0, width=w)
+                rr = w * 0.5
+                draw.ellipse((b[0] - rr, b[1] - rr, b[0] + rr, b[1] + rr), fill=0)
+            r = widths[0] * 0.5
+        else:
+            if len(pts) >= 2:
+                draw.line(pts, fill=0, width=width, joint="curve")
+            r = width * 0.45
         for px, py in (pts[0], pts[-1]):
             draw.ellipse((px - r, py - r, px + r, py + r), fill=0)
+    if brush:
+        img = img.filter(ImageFilter.GaussianBlur(radius=canvas_px * 0.012))
     return np.asarray(img.resize((size, size), Image.Resampling.BILINEAR), dtype=np.uint8)
 
 
@@ -286,11 +310,12 @@ class GranitaClassifier:
         *,
         fraction: float = DEFAULT_STROKE_FRACTION,
         pen_width: float = DEFAULT_PEN_WIDTH,
+        brush: bool = False,
     ) -> Prediction:
         """Classify stylus strokes drawn in an editor (see :func:`render_strokes`)."""
         size = DEFAULT_INPUT_SIZE[0]
         glyph = render_strokes(
-            strokes, size, fraction=fraction, pen_width=pen_width, paper=self.paper
+            strokes, size, fraction=fraction, pen_width=pen_width, brush=brush, paper=self.paper
         )
         return self.predict(glyph, top_k=top_k)
 

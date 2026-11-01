@@ -162,3 +162,15 @@ def test_from_checkpoint_round_trip(tmp_path: Path) -> None:
     assert clf.classes == ["a", "b", "c"]
     with pytest.raises(FileNotFoundError):
         GranitaClassifier.from_checkpoint(tmp_path / "missing.pt", device="cpu")
+
+
+def test_render_strokes_brush_mode() -> None:
+    strokes = [[(0.0, 0.0), (10.0, 2.0), (30.0, 3.0), (31.0, 40.0), (32.0, 90.0)]]
+    pen = render_strokes(strokes, 32, fraction=0.7)
+    brush = render_strokes(strokes, 32, fraction=0.7, brush=True)
+    assert brush.shape == (32, 32) and brush.dtype == np.uint8
+    assert (brush < 128).sum() > 10 and int(brush[0, 0]) == 255
+    assert not np.array_equal(pen, brush)
+    assert len(np.unique(brush)) > len(np.unique(pen))  # soft edge adds grey levels
+    clf = _classifier(["a", "b"])
+    assert clf.predict_strokes(strokes, brush=True).label in ("a", "b")

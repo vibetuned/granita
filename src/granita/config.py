@@ -6,7 +6,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Final
 
-# Canonical 33 music glyph classes matching musicset isolated symbols
+# Canonical music glyph classes, in musicset's `symbols` catalog order (the first 33 are
+# the original marks, the rest were added with the HOMUS pen-stroke data)
 DEFAULT_CLASSES: Final[tuple[str, ...]] = (
     "fing1",
     "fing2",
@@ -41,6 +42,34 @@ DEFAULT_CLASSES: Final[tuple[str, ...]] = (
     "dynamicForzando",
     "dynamicSforzato",
     "pedal",
+    "noteWhole",
+    "noteHalf",
+    "noteQuarter",
+    "note8th",
+    "note16th",
+    "note32nd",
+    "note64th",
+    "augmentationDot",
+    "restWholeHalf",
+    "restQuarter",
+    "rest8th",
+    "rest16th",
+    "rest32nd",
+    "rest64th",
+    "gClef",
+    "fClef",
+    "cClef",
+    "timeSigCommon",
+    "timeSigCutCommon",
+    "timeSig2over2",
+    "timeSig2over4",
+    "timeSig3over4",
+    "timeSig3over8",
+    "timeSig4over4",
+    "timeSig6over8",
+    "timeSig9over8",
+    "timeSig12over8",
+    "barlineSingle",
 )
 
 CLASS_TO_IDX: Final[dict[str, int]] = {name: i for i, name in enumerate(DEFAULT_CLASSES)}
@@ -80,6 +109,34 @@ CLASS_GROUPS: Final[dict[str, str]] = {
     "dynamicForzando": "dynamic",
     "dynamicSforzato": "dynamic",
     "pedal": "pedal",
+    "noteWhole": "note",
+    "noteHalf": "note",
+    "noteQuarter": "note",
+    "note8th": "note",
+    "note16th": "note",
+    "note32nd": "note",
+    "note64th": "note",
+    "augmentationDot": "note",
+    "restWholeHalf": "rest",
+    "restQuarter": "rest",
+    "rest8th": "rest",
+    "rest16th": "rest",
+    "rest32nd": "rest",
+    "rest64th": "rest",
+    "gClef": "clef",
+    "fClef": "clef",
+    "cClef": "clef",
+    "timeSigCommon": "timesig",
+    "timeSigCutCommon": "timesig",
+    "timeSig2over2": "timesig",
+    "timeSig2over4": "timesig",
+    "timeSig3over4": "timesig",
+    "timeSig3over8": "timesig",
+    "timeSig4over4": "timesig",
+    "timeSig6over8": "timesig",
+    "timeSig9over8": "timesig",
+    "timeSig12over8": "timesig",
+    "barlineSingle": "barline",
 }
 
 DEFAULT_INPUT_SIZE: Final[tuple[int, int]] = (32, 32)
@@ -88,8 +145,9 @@ PAPER: Final[int] = 255
 """Background grey level of every training image (black ink on white paper)."""
 
 # Sample provenance codes written by ``musicset symbols`` as ``s_<split>`` in dataset.npz
-SOURCE_NAMES: Final[tuple[str, ...]] = ("font", "stroke", "crop")
-"""``font``: SMuFL glyph render, ``stroke``: stylus stroke template, ``crop``: real score crop."""
+SOURCE_NAMES: Final[tuple[str, ...]] = ("font", "stroke", "crop", "hand")
+"""``font``: SMuFL glyph render, ``stroke``: stylus stroke template, ``crop``: real score
+crop, ``hand``: real pen strokes (HOMUS writers, never shared between splits)."""
 
 
 @dataclass

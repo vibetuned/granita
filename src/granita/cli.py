@@ -188,6 +188,9 @@ def parser_infer(p: argparse.ArgumentParser) -> None:
         default=DEFAULT_PEN_WIDTH,
         help="strokes only: pen width as a fraction of the canvas",
     )
+    p.add_argument(
+        "--brush", action="store_true", help="strokes only: pressure-like brush instead of a pen"
+    )
     p.add_argument("--device", type=str, default="auto")
     p.add_argument("--top-k", type=int, default=5)
 
@@ -203,6 +206,7 @@ def cmd_infer(args: argparse.Namespace) -> None:
             top_k=args.top_k,
             fraction=args.fraction,
             pen_width=args.pen_width,
+            brush=args.brush,
         )
     else:
         with Image.open(args.image) as img:

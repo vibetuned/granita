@@ -1,0 +1,137 @@
+[
+  {
+    "model_name": "tiny",
+    "num_params": 77793,
+    "train_time_sec": 44.04910945892334,
+    "latency_ms_batch128": 0.14818492500126013,
+    "val_top1": 0.9895249695493301,
+    "val_macro_f1": 0.9894765980111325,
+    "test_top1": 0.9913604283280604,
+    "test_top3": 0.9986614748113897,
+    "test_macro_f1": 0.9913517836050552,
+    "group_f1": {
+      "fingering": 0.9866622550825971,
+      "ornament": 0.9887037751635755,
+      "articulation": 0.9865057533531786,
+      "accidental": 0.9906693467879263,
+      "dynamic": 0.9971897436385729,
+      "pedal": 0.9856262833675565
+    },
+    "checkpoint_path": "/home/flux/projects/granita/checkpoints/ablation_v2/tiny/best_model.pt",
+    "eval_split": "test",
+    "source_accuracy": {
+      "font": 0.9945323179066589,
+      "stroke": 0.986449864498645,
+      "crop": 0.9858112276372609
+    },
+    "epochs": 13
+  },
+  {
+    "model_name": "granitanet",
+    "num_params": 1997561,
+    "train_time_sec": 32.901557207107544,
+    "latency_ms_batch128": 0.7567212500134701,
+    "val_top1": 0.9987819732034104,
+    "val_macro_f1": 0.9987782487094948,
+    "test_top1": 0.9978096860550012,
+    "test_top3": 0.9998783158919445,
+    "test_macro_f1": 0.9978081642489793,
+    "group_f1": {
+      "fingering": 0.9952941176470589,
+      "ornament": 0.9983127889392026,
+      "articulation": 0.99508044898312,
+      "accidental": 0.9992199765080645,
+      "dynamic": 0.999349816706625,
+      "pedal": 0.9959349593495934
+    },
+    "checkpoint_path": "/home/flux/projects/granita/checkpoints/ablation_v2/granitanet/best_model.pt",
+    "eval_split": "test",
+    "source_accuracy": {
+      "font": 0.9984378051161883,
+      "stroke": 0.997289972899729,
+      "crop": 0.9962985811227637
+    },
+    "epochs": 13
+  },
+  {
+    "model_name": "regla",
+    "num_params": 1454529,
+    "train_time_sec": 87.80856251716614,
+    "latency_ms_batch128": 2.479414924982848,
+    "val_top1": 0.9981729598051157,
+    "val_macro_f1": 0.9981634692599733,
+    "test_top1": 0.9979313701630567,
+    "test_top3": 0.9998783158919445,
+    "test_macro_f1": 0.9979173950701655,
+    "group_f1": {
+      "fingering": 0.9944664031620555,
+      "ornament": 0.9987481345670064,
+      "articulation": 0.9938188364290974,
+      "accidental": 0.9992214333049322,
+      "dynamic": 1.0,
+      "pedal": 1.0
+    },
+    "checkpoint_path": "/home/flux/projects/granita/checkpoints/ablation_v2/regla/best_model.pt",
+    "eval_split": "test",
+    "source_accuracy": {
+      "font": 0.9986330794766647,
+      "stroke": 0.9952574525745257,
+      "crop": 0.9981492905613819
+    },
+    "epochs": 15
+  },
+  {
+    "model_name": "iformer",
+    "num_params": 2668225,
+    "train_time_sec": 79.40935182571411,
+    "latency_ms_batch128": 2.1070854750178114,
+    "val_top1": 0.9980511571254568,
+    "val_macro_f1": 0.9980406933230275,
+    "test_top1": 0.9965928449744463,
+    "test_top3": 0.9997566317838891,
+    "test_macro_f1": 0.9965614278740732,
+    "group_f1": {
+      "fingering": 0.9914983638132254,
+      "ornament": 0.9970645909865474,
+      "articulation": 0.9911612818061449,
+      "accidental": 0.9987577529525551,
+      "dynamic": 0.9996794859941542,
+      "pedal": 0.9979633401221996
+    },
+    "checkpoint_path": "/home/flux/projects/granita/checkpoints/ablation_v2/iformer/best_model.pt",
+    "eval_split": "test",
+    "source_accuracy": {
+      "font": 0.9986330794766647,
+      "stroke": 0.989159891598916,
+      "crop": 0.9969154842689698
+    },
+    "epochs": 12
+  },
+  {
+    "model_name": "lsnet",
+    "num_params": 2517465,
+    "train_time_sec": 147.7048180103302,
+    "latency_ms_batch128": 8.021681125001123,
+    "val_top1": 0.9978075517661389,
+    "val_macro_f1": 0.9977962599960616,
+    "test_top1": 0.9975663178388903,
+    "test_top3": 0.9997566317838891,
+    "test_macro_f1": 0.9975541065592692,
+    "group_f1": {
+      "fingering": 0.9945098039215686,
+      "ornament": 0.9974905982905982,
+      "articulation": 0.9942522916332234,
+      "accidental": 0.9996023856858848,
+      "dynamic": 0.9993372315564425,
+      "pedal": 0.9979633401221996
+    },
+    "checkpoint_path": "/home/flux/projects/granita/checkpoints/ablation_v2/lsnet/best_model.pt",
+    "eval_split": "test",
+    "source_accuracy": {
+      "font": 0.9982425307557118,
+      "stroke": 0.9966124661246613,
+      "crop": 0.9962985811227637
+    },
+    "epochs": 15
+  }
+]
