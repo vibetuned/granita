@@ -22,3 +22,6 @@ runs/
 *.safetensors
 *.pt
 
+
+# Released models, tracked on purpose (see models/README.md); weights elsewhere stay ignored
+!models/**

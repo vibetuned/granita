@@ -21,7 +21,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+data = [
+    "musicset",
+]
 export = [
+    "coremltools>=9.0",
+    "litert-torch>=0.10.0",
     "onnx>=1.17.0",
     "onnxscript>=0.3.0",
     "onnxruntime>=1.20.0",
@@ -44,6 +49,7 @@ dev = [
 packages = ["src/granita"]
 
 [tool.uv.sources]
+musicset = { git = "https://github.com/vibetuned/musicset", branch = "main" }
 torch = [{ index = "pytorch-cu130" }]
 torchvision = [{ index = "pytorch-cu130" }]
 

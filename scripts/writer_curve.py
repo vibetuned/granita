@@ -83,8 +83,9 @@ def main() -> None:
         subset_dir.mkdir(parents=True, exist_ok=True)
         subset = subset_dir / "dataset.npz"
         arrays = {k: data[k] for k in data.files}
-        for k in ("x_train", "y_train", "s_train", "w_train"):
-            arrays[k] = data[k][keep]
+        for k in ("x_train", "y_train", "s_train", "w_train", "c_train"):
+            if k in arrays:
+                arrays[k] = data[k][keep]
         np.savez_compressed(subset, **arrays)
         n_hand = int((arrays["s_train"] == HAND).sum())
         print(f"\n=== {n} writers: {int(keep.sum())} training samples, {n_hand} hand")

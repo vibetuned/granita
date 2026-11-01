@@ -29,7 +29,13 @@ import torch.nn.functional as F
 from PIL import Image, ImageDraw, ImageFilter
 
 from granita.config import CLASS_GROUPS, CONTEXT_DIM, DEFAULT_CLASSES, DEFAULT_INPUT_SIZE, PAPER
-from granita.context import SymbolContext, context_from_mapping, context_vector
+from granita.context import (
+    NOTE_RANGE,
+    SymbolContext,
+    context_from_mapping,
+    context_from_strokes,
+    context_vector,
+)
 from granita.data.transforms import get_eval_transforms
 from granita.models.backbone import create_model
 
@@ -42,10 +48,9 @@ ContextLike = SymbolContext | Mapping[str, Any] | np.ndarray | None
 """Where the symbol sits: a ``SymbolContext``, its field dict, a ready vector, or unknown."""
 """One pen stroke as ``(x, y)`` points, in any consistent unit (pixels, mm, ...)."""
 
-# musicset draws stroke templates spanning 0.55-0.88 of the canvas with a pen
-# 0.055-0.115 canvas widths wide; these are the midpoints.
+# 0.05 (~1.6px on 32x32) scored best on held-out handwriting in the stroke-style sweep.
 DEFAULT_STROKE_FRACTION = 0.7
-DEFAULT_PEN_WIDTH = 0.085
+DEFAULT_PEN_WIDTH = 0.05
 CANVAS_STAFF_SPACES = 8.8
 """Staff spaces that fill the glyph canvas; musicset's size rule for real pen strokes
 (a HOMUS canvas of 150 pen units is ~8.8 staff spaces). Keep in sync with musicset.homus."""
@@ -109,6 +114,7 @@ def crop_glyph(
     *,
     margin: float = 0.18,
     min_span_px: float = 14.0,
+    paper: int = PAPER,
 ) -> np.ndarray:
     """Crop ``bbox`` (``x1, y1, x2, y2`` pixels) from a page the way musicset builds score crops.
 
@@ -139,7 +145,7 @@ def crop_glyph(
     if sx1 <= sx0 or sy1 <= sy0:
         raise ValueError(f"bbox {tuple(bbox)} falls outside the {w}x{h} page")
     sub = image[sy0:sy1, sx0:sx1]
-    bg = int(np.percentile(sub, 85)) if sub.size else PAPER
+    bg = int(np.percentile(sub, 85)) if sub.size else paper
     square = np.full((side, side), bg, dtype=np.uint8)
     square[sy0 - iy0 : sy1 - iy0, sx0 - ix0 : sx1 - ix0] = sub
     return np.asarray(
@@ -378,6 +384,27 @@ class GranitaClassifier:
             fraction = fraction_from_staff_space(strokes, staff_space)
         if fraction is None:
             fraction = DEFAULT_STROKE_FRACTION
+        if isinstance(context, Mapping) and ("width" not in context or "height" not in context):
+            # Size the context from the strokes: by the staff space when known, else by the
+            # staff space the fraction implies (span = fraction * CANVAS_STAFF_SPACES spaces)
+            if "y_staff" not in context:
+                raise ValueError("a stroke context needs at least 'y_staff'")
+            if staff_space is None:
+                points = [(float(x), float(y)) for stroke in strokes for x, y in stroke]
+                xs = [pt[0] for pt in points]
+                ys = [pt[1] for pt in points]
+                span = max(max(xs) - min(xs), max(ys) - min(ys)) if points else 0.0
+                staff_space = max(span, 1e-6) / (CANVAS_STAFF_SPACES * fraction)
+            dx, dy = context.get("note_dx"), context.get("note_dy")
+            context = context_from_strokes(
+                strokes,
+                staff_space,
+                y_staff=float(context["y_staff"]),
+                x_measure=float(context.get("x_measure", 0.5)),
+                barline=float(context.get("barline", NOTE_RANGE)),
+                note_dx=None if dx is None else float(dx),
+                note_dy=None if dy is None else float(dy),
+            )
         glyph = render_strokes(
             strokes, size, fraction=fraction, pen_width=pen_width, brush=brush, paper=self.paper
         )
@@ -393,7 +420,9 @@ class GranitaClassifier:
     ) -> Prediction:
         """Classify the glyph inside ``bbox`` on a page image (see :func:`crop_glyph`)."""
         return self.predict(
-            crop_glyph(page, bbox, DEFAULT_INPUT_SIZE[0]), top_k=top_k, context=context
+            crop_glyph(page, bbox, DEFAULT_INPUT_SIZE[0], paper=self.paper),
+            top_k=top_k,
+            context=context,
         )
 
 

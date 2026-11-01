@@ -24,7 +24,14 @@ from granita.models.backbone import (
     count_parameters,
     create_model,
 )
-from granita.models.export import export_onnx, export_pt2, export_torchscript, write_sidecar
+from granita.models.export import (
+    export_coreml,
+    export_litert,
+    export_onnx,
+    export_pt2,
+    export_torchscript,
+    write_sidecar,
+)
 from granita.train.ablation import DEFAULT_ABLATION_MODELS, run_ablation
 from granita.train.trainer import resolve_device, run_training
 
@@ -260,8 +267,11 @@ def parser_export(p: argparse.ArgumentParser) -> None:
         "--format",
         type=str,
         default="onnx",
-        choices=["onnx", "pt2", "torchscript"],
-        help="onnx (ONNX Runtime, browsers), pt2 (torch.export), torchscript (deprecated)",
+        choices=["onnx", "coreml", "litert", "pt2", "torchscript"],
+        help=(
+            "onnx (ONNX Runtime, browsers), coreml (.mlpackage), "
+            "litert (.tflite), pt2 (torch.export), torchscript (deprecated)"
+        ),
     )
     p.add_argument(
         "--static-batch", action="store_true", help="fix the batch size to 1 instead of dynamic"
@@ -274,7 +284,7 @@ def parser_export(p: argparse.ArgumentParser) -> None:
 
 
 def cmd_export(args: argparse.Namespace) -> None:
-    """Export a checkpoint to ONNX, torch.export (.pt2) or TorchScript."""
+    """Export a checkpoint to ONNX, Core ML, LiteRT, torch.export (.pt2) or TorchScript."""
     ckpt = torch.load(args.checkpoint, map_location="cpu", weights_only=True)
     classes = ckpt.get("classes", DEFAULT_CLASSES)
     model_name = ckpt.get("model_name", "granitanet")
@@ -286,11 +296,15 @@ def cmd_export(args: argparse.Namespace) -> None:
     out = Path(args.output)
     dynamic = not args.static_batch
     if args.format == "onnx":
-        export_onnx(model, out, dynamic_batch=dynamic)
+        out = export_onnx(model, out, dynamic_batch=dynamic)
+    elif args.format == "coreml":
+        out = export_coreml(model, out, dynamic_batch=dynamic)
+    elif args.format == "litert":
+        out = export_litert(model, out)
     elif args.format == "pt2":
-        export_pt2(model, out, dynamic_batch=dynamic)
+        out = export_pt2(model, out, dynamic_batch=dynamic)
     else:
-        export_torchscript(model, out)
+        out = export_torchscript(model, out)
     print(f"[*] Exported {model_name} as {args.format} to {out}")
     if args.sidecar:
         sidecar = write_sidecar(
@@ -328,7 +342,9 @@ def main() -> None:
     parser_infer(p_infer)
     p_infer.set_defaults(func=cmd_infer)
 
-    p_export = subparsers.add_parser("export", help="Export a model to ONNX, pt2 or TorchScript")
+    p_export = subparsers.add_parser(
+        "export", help="Export a model to ONNX, Core ML, LiteRT, pt2 or TorchScript"
+    )
     parser_export(p_export)
     p_export.set_defaults(func=cmd_export)
 

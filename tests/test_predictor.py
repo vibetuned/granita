@@ -180,7 +180,23 @@ def test_predict_with_context() -> None:
     strokes = [[(0.0, 0.0), (0.0, 40.0)]]
     derived = context_from_strokes(strokes, 10.0, y_staff=-3.0, note_dx=1.0, note_dy=-2.0)
     assert derived.height == 4.0 and derived.width == 0.0 and derived.note_dx == 1.0
-    assert clf.predict_strokes(strokes, staff_space=10.0, context=derived).label in ("a", "b", "c")
+    p_derived = clf.predict_strokes(strokes, staff_space=10.0, context=derived)
+    p_partial = clf.predict_strokes(
+        strokes,
+        staff_space=10.0,
+        context={"y_staff": -3.0, "note_dx": 1.0, "note_dy": -2.0},
+    )
+    assert p_derived.label in ("a", "b", "c") and p_derived.top_k == p_partial.top_k
+    # without a staff space the size comes from the fraction: 0.7 of the canvas = 6.16 spaces
+    p_fraction = clf.predict_strokes(
+        strokes, fraction=0.7, context={"y_staff": -3.0, "note_dx": 1.0, "note_dy": -2.0}
+    )
+    expect = context_from_strokes(
+        strokes, 40.0 / (8.8 * 0.7), y_staff=-3.0, note_dx=1.0, note_dy=-2.0
+    )
+    assert p_fraction.top_k == clf.predict_strokes(strokes, fraction=0.7, context=expect).top_k
+    with pytest.raises(ValueError, match="y_staff"):
+        clf.predict_strokes(strokes, context={"note_dx": 1.0})
     batch = clf.predict_batch([img, img], contexts=[ctx, None])
     assert len(batch) == 2
     # a context-free model ignores the context

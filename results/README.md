@@ -5,7 +5,7 @@ Every training run writes its tables next to its weights under `checkpoints/<run
 copies the tables here and regenerates [INDEX.md](INDEX.md). Weights are never copied.
 All runs: granitanet unless stated, 15 epochs, batch 256, 2 warmup epochs, seed 42.
 
-Dataset builds live in `../musicset/data/`:
+Dataset builds are produced by `musicset symbols` (names below are the output directories of those builds):
 
 | build | classes | train / val / test | notes |
 |---|---|---|---|
@@ -121,3 +121,43 @@ The context removes two thirds of the shape-identical errors and lifts held-out 
 does not move: that is a visual distinction (filled head), not a positional one. Only 56% of test
 samples, and 28% of the handwritten ones, had a context at all, so these gains are a lower bound
 for an editor that always sends one.
+
+## 7. Page crops for stemmed notes and time signatures (`granitanet_v6_ctx/`, `granitanet_v6_noctx/`, `context_effect_v6.md`)
+
+musicset now also crops standalone notes (notehead + stem + flag, unbeamed, not in chords;
+duration from the `dur` attribute, present on 52% of the notes in the built datasets, else from the flag glyph and
+stem) and stacked time signatures (digit rows under `meterSig`). Every class has a context pool
+and the handwritten test samples with a known context rose from 28% to 69%. The HOMUS val and
+test images are now rendered with the editor's pen width 0.05 (they were 0.085; the sweep in
+section 3 predicted the gain). The test split gained 751 crops, so absolute numbers are not
+comparable with section 6; the twins are.
+
+| test split, 16,624 samples (12,543 with a known context) | with context | context masked | context-free twin |
+|---|---|---|---|
+| top-1 | **98.68%** | 97.94% | 98.06% |
+| hand (held-out writers) | **88.95%** | 86.05% | 86.25% |
+| stroke | 99.05% | 96.61% | 97.29% |
+| crop | 99.49% | 99.07% | 99.28% |
+| augmentation dot vs. staccato errors | **23** | 69 | 59 |
+| fing1 vs. barline errors | **4** | 21 | 21 |
+| staccatissimo vs. barline errors | 5 | 11 | 8 |
+| whole note vs. augmentation dot errors | 1 | 5 | 7 |
+| quarter rest vs. natural errors | 5 | 8 | 8 |
+| quarter vs. half note errors | 22 | 27 | 29 |
+
+Same picture as section 6 with more of the data covered: +0.6 top-1 and +2.7 points on held-out
+handwriting from the context, the shape-identical pairs down by two thirds to four fifths.
+`granitanet_v6_ctx` is the released model (`models/granitanet/`).
+
+## 8. Export pipeline
+
+`scripts/export_mobile.py` exports one checkpoint to Core ML, LiteRT, ONNX and pt2 with the
+editor sidecar and checks each against PyTorch. For `granitanet_v5_ctx` (two inputs, `input`
+and `context`):
+
+| format | size | max abs. difference vs. PyTorch |
+|---|---|---|
+| Core ML `.mlpackage` | 3.90 MB | not checkable on Linux (fp16 weights by default) |
+| LiteRT `.tflite` | 7.71 MB | 3.3e-06 |
+| ONNX | 7.84 MB | 2.9e-06 |
+| pt2 | 7.89 MB | 0 |

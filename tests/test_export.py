@@ -1,4 +1,4 @@
-"""Unit tests for exporting Granita models to ONNX, torch.export and TorchScript."""
+"""Unit tests for exporting Granita models to ONNX, Core ML, LiteRT, pt2 and TorchScript."""
 
 from pathlib import Path
 
@@ -7,7 +7,13 @@ import pytest
 import torch
 
 from granita.models.backbone import create_model
-from granita.models.export import export_onnx, export_pt2, export_torchscript
+from granita.models.export import (
+    export_coreml,
+    export_litert,
+    export_onnx,
+    export_pt2,
+    export_torchscript,
+)
 
 FAMILIES = ["tiny", "granitanet", "regla", "iformer", "lsnet"]
 
@@ -85,3 +91,72 @@ def test_export_onnx_matches_torch(tmp_path: Path, model_name: str) -> None:
         (got,) = session.run(None, {"input": x.numpy()})
         assert got.shape == (batch, 5)
         np.testing.assert_allclose(got, expected, atol=1e-4, rtol=1e-3)
+
+
+@pytest.mark.parametrize("model_name", FAMILIES)
+def test_export_coreml_all_families(tmp_path: Path, model_name: str) -> None:
+    ct = pytest.importorskip("coremltools")
+    model = create_model(model_name, num_classes=5, in_channels=1).eval()
+    out_dir = export_coreml(model, tmp_path / f"{model_name}.mlpackage")
+    assert out_dir.is_dir() and out_dir.suffix == ".mlpackage"
+
+    loaded = ct.models.MLModel(str(out_dir))
+    spec = loaded.get_spec()
+    assert [i.name for i in spec.description.input] == ["input"]
+    assert [o.name for o in spec.description.output] == ["logits"]
+
+
+@pytest.mark.parametrize("model_name", FAMILIES)
+def test_export_litert_matches_torch(tmp_path: Path, model_name: str) -> None:
+    pytest.importorskip("litert_torch")
+    litert_interp = pytest.importorskip("ai_edge_litert.interpreter")
+    model = create_model(model_name, num_classes=5, in_channels=1).eval()
+    out_file = export_litert(model, tmp_path / f"{model_name}.tflite")
+    assert out_file.is_file()
+
+    interp = litert_interp.Interpreter(model_path=str(out_file))
+    interp.allocate_tensors()
+    in_details = interp.get_input_details()
+    out_details = interp.get_output_details()
+    assert len(in_details) == 1
+
+    x = torch.randn(1, 1, 32, 32)
+    interp.set_tensor(in_details[0]["index"], x.numpy())
+    interp.invoke()
+    got = interp.get_tensor(out_details[0]["index"])
+    with torch.no_grad():
+        expected = model(x).numpy()
+    assert got.shape == (1, 5)
+    np.testing.assert_allclose(got, expected, atol=1e-4, rtol=1e-3)
+
+
+def test_export_mobile_with_context_input(tmp_path: Path) -> None:
+    ct = pytest.importorskip("coremltools")
+    pytest.importorskip("litert_torch")
+    litert_interp = pytest.importorskip("ai_edge_litert.interpreter")
+    from granita.models.backbone import GranitaNet
+
+    model = GranitaNet(num_classes=4, context_dim=9).eval()
+
+    # Core ML with context
+    coreml_dir = export_coreml(model, tmp_path / "ctx")
+    assert coreml_dir.suffix == ".mlpackage" and coreml_dir.is_dir()
+    spec = ct.models.MLModel(str(coreml_dir)).get_spec()
+    assert [i.name for i in spec.description.input] == ["input", "context"]
+    assert [o.name for o in spec.description.output] == ["logits"]
+
+    # LiteRT with context
+    tflite_file = export_litert(model, tmp_path / "ctx.tflite")
+    interp = litert_interp.Interpreter(model_path=str(tflite_file))
+    interp.allocate_tensors()
+    x, ctx = torch.randn(1, 1, 32, 32), torch.randn(1, 9)
+    for detail in interp.get_input_details():
+        shape = tuple(detail["shape"])
+        if len(shape) == 4:
+            interp.set_tensor(detail["index"], x.numpy())
+        elif len(shape) == 2:
+            interp.set_tensor(detail["index"], ctx.numpy())
+    interp.invoke()
+    got = interp.get_tensor(interp.get_output_details()[0]["index"])
+    with torch.no_grad():
+        np.testing.assert_allclose(got, model(x, ctx).numpy(), atol=1e-4, rtol=1e-3)

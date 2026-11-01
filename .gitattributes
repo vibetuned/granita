@@ -1,0 +1,7 @@
+# Model artifacts: never diff or merge as text
+models/** binary
+*.pt binary
+*.pt2 binary
+*.onnx binary
+*.tflite binary
+*.safetensors binary

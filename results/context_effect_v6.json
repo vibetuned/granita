@@ -1,0 +1,56 @@
+{
+  "with context": {
+    "top1": 0.9868262752646776,
+    "macro_f1": 0.9878800962696819,
+    "source_accuracy": {
+      "font": 0.9979464202370951,
+      "stroke": 0.9905149051490515,
+      "crop": 0.9948542024013722,
+      "hand": 0.8894736842105263
+    },
+    "pair_errors": {
+      "augmentationDot|articStaccatoAbove": 23,
+      "fing1|barlineSingle": 4,
+      "articStaccatissimoAbove|barlineSingle": 5,
+      "noteWhole|augmentationDot": 1,
+      "restQuarter|accidentalNatural": 5,
+      "noteQuarter|noteHalf": 22
+    }
+  },
+  "context masked": {
+    "top1": 0.9794273339749759,
+    "macro_f1": 0.9805460625232191,
+    "source_accuracy": {
+      "font": 0.9950527396620927,
+      "stroke": 0.9661246612466124,
+      "crop": 0.99073756432247,
+      "hand": 0.8605263157894737
+    },
+    "pair_errors": {
+      "augmentationDot|articStaccatoAbove": 69,
+      "fing1|barlineSingle": 21,
+      "articStaccatissimoAbove|barlineSingle": 11,
+      "noteWhole|augmentationDot": 5,
+      "restQuarter|accidentalNatural": 8,
+      "noteQuarter|noteHalf": 27
+    }
+  },
+  "context-free model": {
+    "top1": 0.9806304138594802,
+    "macro_f1": 0.9817365665169382,
+    "source_accuracy": {
+      "font": 0.9951460841967703,
+      "stroke": 0.9728997289972899,
+      "crop": 0.9927958833619211,
+      "hand": 0.8625
+    },
+    "pair_errors": {
+      "augmentationDot|articStaccatoAbove": 59,
+      "fing1|barlineSingle": 21,
+      "articStaccatissimoAbove|barlineSingle": 8,
+      "noteWhole|augmentationDot": 7,
+      "restQuarter|accidentalNatural": 8,
+      "noteQuarter|noteHalf": 29
+    }
+  }
+}

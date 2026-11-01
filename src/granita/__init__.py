@@ -23,6 +23,14 @@ from granita.models.backbone import (
     count_parameters,
     create_model,
 )
+from granita.models.export import (
+    export_coreml,
+    export_litert,
+    export_onnx,
+    export_pt2,
+    export_torchscript,
+    write_sidecar,
+)
 from granita.models.iformer import GranitaIFormer
 from granita.models.lsnet import GranitaLSNet
 from granita.models.regla import GranitaReGLA
@@ -51,6 +59,12 @@ __all__ = [
     "count_parameters",
     "create_model",
     "crop_glyph",
+    "export_coreml",
+    "export_litert",
+    "export_onnx",
+    "export_pt2",
+    "export_torchscript",
     "render_strokes",
     "run_ablation",
+    "write_sidecar",
 ]

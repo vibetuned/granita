@@ -1,11 +1,11 @@
-"""Export utilities for deploying Granita models: ONNX, ``torch.export`` and TorchScript."""
+"""Export utilities for deploying Granita models: ONNX, Core ML, LiteRT, pt2 and TorchScript."""
 
 from __future__ import annotations
 
 import json
 import warnings
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import torch
 
@@ -22,14 +22,17 @@ def write_sidecar(
     model_name: str,
     *,
     context_dim: int = 0,
-    pen_width: float = 0.05,
+    pen_width: float | None = None,
     extra: dict[str, object] | None = None,
 ) -> Path:
     """Write ``<output>.json`` next to an exported model: everything an editor needs to
     feed it the way granita does (class list, input tensor, stroke rasterisation)."""
     from granita.config import CLASS_GROUPS, CONTEXT_FEATURES, DEFAULT_INPUT_SIZE, PAPER
     from granita.data.transforms import GLYPH_MEAN, GLYPH_STD
-    from granita.infer.predictor import CANVAS_STAFF_SPACES, FRACTION_RANGE
+    from granita.infer.predictor import CANVAS_STAFF_SPACES, DEFAULT_PEN_WIDTH, FRACTION_RANGE
+
+    if pen_width is None:
+        pen_width = DEFAULT_PEN_WIDTH
 
     path = Path(output_path).with_suffix(Path(output_path).suffix + ".json")
     sidecar: dict[str, object] = {
@@ -175,4 +178,102 @@ def export_torchscript(
         warnings.simplefilter("ignore", FutureWarning)
         traced = torch.jit.trace(model, example)  # type: ignore[attr-defined]
         traced.save(str(output_path))
+    return output_path
+
+
+def export_coreml(
+    model: nn.Module,
+    output_path: str | Path,
+    input_shape: tuple[int, int, int, int] = DEFAULT_INPUT_SHAPE,
+    dynamic_batch: bool = True,
+) -> Path:
+    """Export to a Core ML ``.mlpackage`` through ``torch.export`` and ``coremltools``
+    (inputs ``input`` and, for a model with a conditioning vector, ``context``; output ``logits``).
+
+    Needs the ``export`` extra (``coremltools``). If ``output_path`` does not end with
+    ``.mlpackage``, ``.mlpackage`` is used as its suffix. When ``dynamic_batch`` is true,
+    a ``RangeDim(1..MAX_BATCH)`` batch axis is requested and falls back to static batch
+    for models whose ops require static batch unfolding (e.g. ``lsnet``'s ``im2col``).
+    """
+    import coremltools as ct  # type: ignore[import-untyped]
+    import numpy as np
+
+    output_path = Path(output_path)
+    if output_path.suffix != ".mlpackage":
+        output_path = output_path.with_suffix(".mlpackage")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    model = model.to("cpu").eval()
+    context_dim = _context_dim(model)
+
+    def _convert(dyn: bool) -> Any:
+        program = torch.export.export(
+            model,
+            _example(input_shape, dyn, context_dim),
+            dynamic_shapes=_dynamic_shapes(dyn, context_dim),
+        ).run_decompositions({})
+        batch_dim: Any = (
+            ct.RangeDim(lower_bound=1, upper_bound=MAX_BATCH, default=input_shape[0])
+            if dyn
+            else input_shape[0]
+        )
+        inputs = [
+            ct.TensorType(
+                name="input",
+                shape=(batch_dim, *input_shape[1:]),
+                dtype=np.float32,
+            )
+        ]
+        if context_dim:
+            inputs.append(
+                ct.TensorType(
+                    name="context",
+                    shape=(batch_dim, context_dim),
+                    dtype=np.float32,
+                )
+            )
+        outputs = [ct.TensorType(name="logits", dtype=np.float32)]
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            return ct.convert(
+                program,
+                inputs=inputs,
+                outputs=outputs,
+                convert_to="mlprogram",
+                minimum_deployment_target=ct.target.iOS16,
+            )
+
+    try:
+        mlmodel = _convert(dynamic_batch)
+    except ValueError:
+        if not dynamic_batch:
+            raise
+        mlmodel = _convert(False)
+    mlmodel.save(str(output_path))
+    return output_path
+
+
+def export_litert(
+    model: nn.Module,
+    output_path: str | Path,
+    input_shape: tuple[int, int, int, int] = DEFAULT_INPUT_SHAPE,
+) -> Path:
+    """Export to a LiteRT (``.tflite``) flatbuffer through ``litert-torch``.
+
+    Needs the ``export`` extra (``litert-torch``). LiteRT's JAX lowering bridge
+    traces concrete static shapes (default ``(1, 1, 32, 32)``, plus ``(1, context_dim)``
+    when the model takes a conditioning vector).
+    """
+    import litert_torch  # type: ignore[import-untyped]
+
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    model = model.to("cpu").eval()
+    context_dim = _context_dim(model)
+    example = _example(input_shape, False, context_dim)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        edge_model = litert_torch.convert(model, example)
+    edge_model.export(str(output_path))
     return output_path
