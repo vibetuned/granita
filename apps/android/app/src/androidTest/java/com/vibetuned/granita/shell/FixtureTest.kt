@@ -116,7 +116,7 @@ class FixtureTest {
     /**
      * The trainer on the fixtures as replies: the layer keeps them right and stays near the
      * anchors; ten replies calling the quarter rest an arpeggio turn it into one — against
-     * the interim anchors, which hold that very drawing — and a reset puts the original back.
+     * the anchors' four quarter rests — and a reset puts the original back.
      */
     @Test
     fun trainerFollowsReplies() {

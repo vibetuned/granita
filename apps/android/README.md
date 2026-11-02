@@ -44,10 +44,11 @@ does not drown the others — holds the layer to the **anchors** (`anchors.json`
 features the released model read with its own answers, the KL from those answers on
 every anchor each epoch) and pulls the weights back toward the original ones (an L2
 anchor). The trained layer is saved (`files/head.json`), used from then on and shown
-in the status line; *Reset the layer* puts the original back. The anchors shipped
-today are the 13 fixtures (an interim set); `scripts/export_anchors.py --data` makes
-the real one from the dataset. A tflite exported without the `personal` signature
-still runs: the status line says so and Train stays off.
+in the status line; *Reset the layer* puts the original back. The anchors are 152
+drawings of the dataset's val split that the model gets right, four per class,
+handwritten where the class has handwriting, none for the note values
+(`scripts/export_anchors.py --data`). A tflite exported without the `personal`
+signature still runs: the status line says so and Train stays off.
 
 ## What an editor would lift
 

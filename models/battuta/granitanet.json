@@ -5801,7 +5801,7 @@
   },
   "checkpoint": "models/battuta/best_model.pt",
   "formats": [
-    "coreml"
+    "litert"
   ],
   "litert": {
     "signature": "serving_default",
@@ -5809,6 +5809,29 @@
       "input": "args_0",
       "context": "args_1"
     },
-    "output": "output_0"
+    "output": "output_0",
+    "signatures": {
+      "serving_default": {
+        "inputs": {
+          "input": "args_0",
+          "context": "args_1"
+        },
+        "outputs": {
+          "logits": "output_0"
+        }
+      },
+      "personal": {
+        "inputs": {
+          "input": "args_0",
+          "context": "args_1",
+          "head_w": "args_2",
+          "head_b": "args_3"
+        },
+        "outputs": {
+          "logits": "output_0",
+          "features": "output_1"
+        }
+      }
+    }
   }
 }
