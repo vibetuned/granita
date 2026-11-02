@@ -98,9 +98,11 @@ class FixtureTest {
     /**
      * The app's rasteriser against Pillow's: the size rule exactly, and the model's answer
      * from the app's own drawing the same as from Pillow's. Android's Canvas and Pillow
-     * rasterise a wide line differently, so the pixels are only guarded against a gross
-     * error (a wrong scale, axis or pen: mean |Δ| under 10 grey levels, fewer than half the
-     * ink pixels far off for a glyph of more than 16) and the exact numbers are logged.
+     * drew a wide line differently before the drawing became a port of Pillow's own
+     * (2026-11-02); the pixels are still only guarded against a gross error (a wrong
+     * scale, axis or pen: mean |Δ| under 10 grey levels, fewer than half the ink pixels far
+     * off for a glyph of more than 16) and the exact numbers are logged — a pixel or two
+     * now, but for the fixtures whose fraction the file rounds.
      */
     @Test
     fun rasteriserMatchesGranita() {

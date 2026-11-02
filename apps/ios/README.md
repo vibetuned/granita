@@ -55,9 +55,14 @@ team is Vibetuned's, as battuta's.
   compute unit: the same top-1, logits within 0.1 (the weights are fp16);
 - **the context** derived from the strokes: the reference vector;
 - **the rasteriser**: the size rule exactly, and the model's answer from the app's
-  own drawing the same as from Pillow's. Core Graphics rasterises a wide line
-  differently from Pillow, so the pixels are only guarded against a gross error
-  (mean difference under 10 grey levels, fewer than half the ink pixels far off for
-  a glyph of more than 16); the exact numbers are printed.
+  own drawing the same as from Pillow's. The drawing is a port of Pillow's own
+  (`StrokeRaster.Paper`, from its `Draw.c`: the wide line's polygon with its
+  whole-pixel offsets, the scan conversion, the joint's pie slice; the dots'
+  ellipses approximated) — Core Graphics drew every stroke fatter and the quarter
+  rest fixture read as an arpeggio (2026-11-02). The pixels are still only
+  guarded against a gross error (mean difference under 10 grey levels, fewer than
+  half the ink pixels far off for a glyph of more than 16), the exact numbers
+  printed: on the Mac they agree with Pillow to a pixel or two, except where
+  `fixtures.json` rounds the fraction (the sharp, fingering 3).
 
 The numbers print in the test log (`coreml units …`, one line per fixture).

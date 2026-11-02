@@ -58,10 +58,14 @@ or an emulator:
   1e-3 (fp32);
 - **the context** derived from the strokes: the reference vector;
 - **the rasteriser**: the size rule exactly, and the model's answer from the app's
-  own drawing the same as from Pillow's. Android's Canvas rasterises a wide line a
-  little differently from Pillow, so the pixels are only guarded against a gross
-  error (mean difference under 10 grey levels, fewer than half the ink pixels far
-  off for a glyph of more than 16); the exact numbers are logged.
+  own drawing the same as from Pillow's. The drawing is a port of Pillow's own
+  (`StrokeRaster.Paper`, from its `Draw.c`: the wide line's polygon with its
+  whole-pixel offsets, the scan conversion, the joint's pie slice; the dots'
+  ellipses approximated) — the Canvas drew every stroke fatter (2026-11-02). The
+  pixels are still only guarded against a gross error (mean difference under 10
+  grey levels, fewer than half the ink pixels far off for a glyph of more than
+  16), the exact numbers logged: they agree with Pillow to a pixel or two, except
+  where `fixtures.json` rounds the fraction (the sharp, fingering 3).
 
 The numbers go to logcat under the tag `granita`
 (`adb logcat -s granita`).
