@@ -165,6 +165,40 @@ class FixtureTest {
     }
 
     /**
+     * The rasteriser on real strokes: `replies_fixtures.json` in the test apk's assets, if
+     * present — a replies file with Pillow's pixels and PyTorch's answer per drawing (made
+     * on a machine with granita: see the android README) — each drawing rendered here and
+     * compared, pixels and answer, the numbers logged per drawing. Skipped without the asset.
+     */
+    @Test
+    fun repliesRasteriser() {
+        val testAssets = InstrumentationRegistry.getInstrumentation().context.assets
+        val text = try { testAssets.open("replies_fixtures.json").bufferedReader().use { it.readText() } } catch (e: Exception) { null }
+        assumeTrue("no replies_fixtures.json in the test assets", text != null)
+        val replies = JSONObject(text!!).getJSONArray("replies")
+        GranitaModel(assets).use { model ->
+            var agree = 0
+            var exact = 0
+            val report = mutableListOf<String>()
+            for (i in 0 until replies.length()) {
+                val r = replies.getJSONObject(i)
+                val strokes = r.getJSONArray("strokes").let { all -> List(all.length()) { k -> all.getJSONArray(k).let { st -> List(st.length()) { j -> st.getJSONArray(j).let { PointF(it.getDouble(0).toFloat(), it.getDouble(1).toFloat()) } } } } }
+                val pixels = r.getJSONArray("pixels").let { a -> IntArray(a.length()) { a.getInt(it) } }
+                val px = StrokeRaster.render(strokes, r.getDouble("fraction"))
+                var sum = 0.0
+                var farOff = 0
+                for (k in px.indices) { val d = abs(px[k] - pixels[k]); sum += d; if (d > 64) farOff++ }
+                val p = model.predict(StrokeRaster.normalize(px), r.getJSONArray("context_vector").floats())
+                val top = r.getJSONObject("top")
+                if (p.top[0].label == top.getString("label")) agree++
+                if (farOff == 0) exact++
+                report.add(String.format(Locale.ROOT, "%-14s pillow: %s %.2f | here: %s %.2f | mean |Δ| %.2f, %d far-off, %d points", r.getString("label"), top.getString("label"), top.getDouble("confidence"), p.top[0].label, p.top[0].confidence, sum / px.size, farOff, strokes.sumOf { it.size }))
+            }
+            Log.i(TAG, "replies: top-1 agrees with PyTorch on $agree of ${replies.length()}, pixels exact on $exact\n" + report.joinToString("\n"))
+        }
+    }
+
+    /**
      * The context derived from strokes on the fixture staff, with its notehead when the
      * fixture has one (the note offsets and the above / below / left / right flags).
      */

@@ -223,11 +223,13 @@ class MainActivity : Activity() {
             contextLine.text = ""
             return
         }
+        answers.addView(TextView(this).apply { textSize = 12f; setTextColor(Color.DKGRAY); text = "Tap the class it was — the reply is saved:" })
         for (t in s.prediction.top) {
             answers.addView(TextView(this).apply {
                 typeface = Typeface.MONOSPACE
                 text = String.format(Locale.ROOT, "%-24s %-12s %5.1f %%", t.label, t.group, t.confidence * 100)
-                setPadding(dp(4), dp(6), dp(4), dp(6))
+                setPadding(dp(8), dp(8), dp(8), dp(8))
+                setBackgroundResource(android.R.drawable.list_selector_background)
                 setOnClickListener { reply(t.label) }
             })
         }

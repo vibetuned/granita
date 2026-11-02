@@ -90,6 +90,7 @@ struct ContentView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     if let p = prediction {
                         // The reply: the class it was, among the five or any other, or none.
+                        Text("Tap the class it was — the reply is saved:").font(.caption).foregroundColor(.secondary)
                         ForEach(Array(p.top.enumerated()), id: \.offset) { _, t in
                             Button {
                                 reply(t.label)

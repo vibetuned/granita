@@ -105,5 +105,12 @@ or an emulator:
   16), the exact numbers logged: they agree with Pillow to a pixel or two, except
   where `fixtures.json` rounds the fraction (the sharp, fingering 3).
 
+- **the rasteriser on real strokes** (skipped without the asset): a replies file with
+  Pillow's pixels and PyTorch's answer per drawing — `scripts/replies_fixtures.py` from
+  a `replies.jsonl`, into `src/androidTest/assets/replies_fixtures.json` (untracked) —
+  each drawing rendered here and compared, the numbers logged per drawing. On the first
+  70 replies from the Galaxy Tab (2026-11-02, a thousand samples a stroke) every pixel
+  matched and every answer agreed.
+
 The numbers go to logcat under the tag `granita`
 (`adb logcat -s granita`).
