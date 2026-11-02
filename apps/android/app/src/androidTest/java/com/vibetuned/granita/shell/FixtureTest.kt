@@ -7,7 +7,9 @@ import androidx.test.platform.app.InstrumentationRegistry
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.util.Locale
@@ -38,6 +40,9 @@ class FixtureTest {
         val pixels = json.getJSONArray("pixels").let { a -> IntArray(a.length()) { a.getInt(it) } }
         val logits = json.getJSONArray("logits").floats()
         val logitsNoContext = json.getJSONArray("logits_no_context").floats()
+        /** What the last layer read, from the `personal` signature. */
+        val features = json.getJSONArray("features").floats()
+        val topIndex: Int = json.getJSONObject("top").getInt("index")
         val topLabel: String = json.getJSONObject("top").getString("label")
         val topConfidence = json.getJSONObject("top").getDouble("confidence")
     }
@@ -80,6 +85,83 @@ class FixtureTest {
             Log.i(TAG, "litert: max |Δ| logits vs PyTorch $worst")
             assertTrue("fp32: logits within 1e-3 of PyTorch, got $worst", worst < 1e-3f)
         }
+    }
+
+    /**
+     * The `personal` signature: the features it gives are the reference's, and the sidecar's
+     * last layer applied to them is the logits it gives. Skipped on a tflite without the
+     * signature (one exported before it, or without the Linux export).
+     */
+    @Test
+    fun personalSignature() {
+        GranitaModel(assets).use { model ->
+            assumeTrue("no personal signature in this tflite", model.personal)
+            val head = model.head!!
+            assertEquals(model.sidecar.classes.size, head.classes)
+            assertEquals(128, head.width)
+            var worstFeatures = 0f
+            var worstHead = 0f
+            for (f in fixtures) {
+                val p = model.predict(StrokeRaster.normalize(f.pixels), f.contextVector)
+                assertEquals(f.drawnAs, 128, p.features.size)
+                worstFeatures = max(worstFeatures, maxAbsDiff(p.features, f.features))
+                worstHead = max(worstHead, maxAbsDiff(head.logits(p.features), p.logits))
+            }
+            Log.i(TAG, "personal: max |Δ| features vs PyTorch $worstFeatures, head·features vs logits $worstHead")
+            assertTrue("features within 1e-3 of PyTorch, got $worstFeatures", worstFeatures < 1e-3f)
+            assertTrue("the head applied to the features is the logits, got $worstHead", worstHead < 1e-3f)
+        }
+    }
+
+    /**
+     * The trainer on the fixtures as replies: the layer keeps them right and stays near the
+     * anchors; ten replies calling the quarter rest an arpeggio turn it into one — against
+     * the interim anchors, which hold that very drawing — and a reset puts the original back.
+     */
+    @Test
+    fun trainerFollowsReplies() {
+        GranitaModel(assets).use { model ->
+            assumeTrue("no personal signature in this tflite", model.personal)
+            val origin = model.head!!.copy()
+            val anchors = Anchors.load(assets)
+            assertNotNull("anchors.json is an asset", anchors)
+            val examples = fixtures.map { f -> Example(model.predict(StrokeRaster.normalize(f.pixels), f.contextVector).features, f.topIndex) }
+            val head = origin.copy()
+            val report = Trainer.train(head, origin, ReplayBuffer(examples), anchors!!.anchors)
+            assertEquals(1f, report.accuracy, 1e-6f)
+            assertTrue("anchor drift ${report.anchorDrift}", report.anchorDrift < 0.1f)
+            val rest = fixtures.first { it.drawnAs == "quarter rest" }
+            val arpeg = model.sidecar.classes.indexOf("arpeg")
+            val restFeatures = model.predict(StrokeRaster.normalize(rest.pixels), rest.contextVector).features
+            val wrong = ReplayBuffer(examples + List(10) { Example(restFeatures, arpeg) })
+            assertEquals("the buffer keeps a class's newest few", ReplayBuffer.PER_CLASS, wrong.examples.count { it.label == arpeg })
+            val corrected = origin.copy()
+            Trainer.train(corrected, origin, wrong, anchors.anchors)
+            model.head = corrected
+            assertEquals("arpeg", model.predict(StrokeRaster.normalize(rest.pixels), rest.contextVector).top[0].label)
+            model.head = origin
+            assertEquals("restQuarter", model.predict(StrokeRaster.normalize(rest.pixels), rest.contextVector).top[0].label)
+        }
+    }
+
+    /** A reply written and read back, musicset's keys in the file, its context whole. */
+    @Test
+    fun repliesRoundTrip() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val dir = java.io.File(context.cacheDir, "replies-" + System.nanoTime()).apply { mkdirs() }
+        val store = Annotations(context, dir)
+        assertEquals(0, store.count)
+        val ctx = SymbolContext(-0.1, 0.5, 12.4, -1.0, 1.4, 1.6, 2.6, 1.3, 4.0)
+        val staff = Staff(24.0, 300.0, 100.0, 700.0, listOf(PointF(424f, 300f)))
+        store.append(Reply("accidentalSharp", store.writer, 24.0, listOf(listOf(doubleArrayOf(395.0, 255.0, 0.0, 0.5), doubleArrayOf(410.0, 275.0, 16.0, 0.6))), ctx, staff, 0.889, GranitaModel.Top("accidentalSharp", "accidental", 0.9f), "s-pen", "granita-shell/android", Annotations.now()))
+        assertEquals(1, store.count)
+        val text = store.file.readText()
+        assertTrue(text, text.contains("\"staff_space\":24") && text.contains("\"note_dx\":-1") && text.contains("\"label\":\"accidentalSharp\""))
+        val back = store.all().single()
+        assertEquals(listOf(395.0, 255.0, 0.0, 0.5), back.strokes[0][0].toList())
+        assertEquals(ctx.vector().toList(), back.context.vector().toList())
+        assertEquals(1, back.staff.notes.size)
+        assertEquals(1, Annotations(context, dir).count)
     }
 
     /**

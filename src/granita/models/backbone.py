@@ -169,7 +169,10 @@ class GranitaNet(nn.Module):
             nn.Linear(128, num_classes),
         )
 
-    def forward(self, x: torch.Tensor, context: torch.Tensor | None = None) -> torch.Tensor:
+    def features(self, x: torch.Tensor, context: torch.Tensor | None = None) -> torch.Tensor:
+        """What the last layer reads (``(B, 128)``): the stages pooled, the conditioning
+        vector's projection joined, the head up to its last ``Linear`` — what an app that
+        trains that layer on the device needs back (``HeadInputs`` in ``export``)."""
         out = self.stem(x)
         out = self.stage1(out)
         out = self.stage2(out)
@@ -179,7 +182,10 @@ class GranitaNet(nn.Module):
             if context is None:
                 context = feats.new_zeros(feats.shape[0], self.context_dim)
             feats = torch.cat([feats, self.context(context)], dim=1)
-        return self.head(feats)
+        return self.head[:-1](feats)
+
+    def forward(self, x: torch.Tensor, context: torch.Tensor | None = None) -> torch.Tensor:
+        return self.head[-1](self.features(x, context))
 
 
 class GranitaTiny(nn.Module):

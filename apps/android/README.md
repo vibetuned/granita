@@ -10,16 +10,44 @@ context* off sends the all-zero vector instead, to compare.
 Every stroke's end classifies all the strokes since the last *Clear*, so a sharp can
 take its four strokes.
 
-*Add a note* then a tap on the staff places a notehead (snapped to the lines and
-spaces; *Remove the note* takes it away) with its stem, so the context's note features
-are real: the symbol's offset from the centre of the note's body (notehead and stem, as
-granita measures every note) and whether it sits above, below, left or right of that
-body. Two pairs of − / + buttons change the size rule, to calibrate it against
+*Add notes* then taps on the staff place noteheads (snapped to the lines and spaces; a
+tap on a note takes it away, *Clear notes* all of them) with their stems, so the
+context's note features are real: the symbol's offset from the centre of the nearest
+note's body (notehead and stem, as granita measures every note) and whether it sits
+above, below, left or right of that body. Two pairs of − / + buttons change the size
+rule, to calibrate it against
 natural-size writing: how many staff spaces fill the canvas (granita's 3.0, which these
 buttons calibrated: a symbol's longer side over that many spaces is its fraction of the
 canvas) and the smallest fraction a symbol is drawn at (granita's 0.08: a floor lifts
 the small symbols and leaves the large ones at their natural size). The status line
 shows the fraction used.
+
+## The reply, the dataset and training on the device
+
+Under the five answers, tap the class the drawing **was** — one of the five, or
+*Another…* for the whole list — and it is saved to `replies.jsonl` in the app's
+external files (`Android/data/com.vibetuned.granita.shell/files/`; *Share the replies*
+hands it to another app through a FileProvider) as one line in musicset's contribution
+format (`musicset symbols --strokes`): `label`, `writer` (this install's id),
+`staff_space`, the `strokes` with each sample's time and pressure, the `context` facts,
+and the shell's own `staff`, `notes`, `fraction`, the model's `predicted` answer,
+`device`, `app` and `time`. *Discard* drops the drawing; nothing is saved. Every reply
+clears the staff for the next drawing; the notes stay.
+
+*Train on N replies* retrains the model's last layer on this device: the tflite's
+`personal` signature takes that layer's weights as inputs (`head_w`, `head_b`, the
+sidecar's `head` to start from) and gives back the 128 features the layer reads, so
+the whole network still runs as compiled and the layer is a plain `Linear(128 ->
+classes)` the app owns. The trainer (`Head.kt`) takes gradient steps on a tiny replay
+buffer — the newest eight replies of each class, so one symbol written fifty times
+does not drown the others — holds the layer to the **anchors** (`anchors.json`:
+features the released model read with its own answers, the KL from those answers on
+every anchor each epoch) and pulls the weights back toward the original ones (an L2
+anchor). The trained layer is saved (`files/head.json`), used from then on and shown
+in the status line; *Reset the layer* puts the original back. The anchors shipped
+today are the 13 fixtures (an interim set); `scripts/export_anchors.py --data` makes
+the real one from the dataset. A tflite exported without the `personal` signature
+still runs: the status line says so and Train stays off.
 
 ## What an editor would lift
 
@@ -28,8 +56,12 @@ shows the fraction used.
   no anti-aliasing, Pillow's bilinear reduction to 32 px re-implemented exactly).
 - `SymbolContext.kt`: granita's `SymbolContext` and `context_vector`.
 - `GranitaModel.kt`: LiteRT's CompiledModel API (2.3.2, CPU). The tflite keeps
-  litert-torch's names, not the sidecar's: signature `serving_default`, inputs
-  `args_0` (the image) and `args_1` (the context), output `output_0`.
+  litert-torch's names, not the sidecar's — the sidecar's `litert` block lists them per
+  signature: `serving_default` with `args_0` (the image), `args_1` (the context) and
+  `output_0`; `personal` with the layer's `head_w` and `head_b` after them and the
+  `features` as a second output.
+- `Head.kt`: the layer, the replay buffer, the anchors and the trainer.
+- `Annotations.kt`: the replies file, musicset's record, and its sharing.
 
 ## Building
 
@@ -44,9 +76,9 @@ export ANDROID_HOME=~/Library/Android/sdk JAVA_HOME=$(/usr/libexec/java_home -v 
 ./gradlew :app:connectedDebugAndroidTest           # the fixture tests, on it
 ```
 
-The model, its sidecar and the fixtures are copied from `models/battuta` into the
-build's assets at build time (`copyGranitaAssets`); nothing is duplicated here. minSdk
-24, as battuta.
+The model, its sidecar, the anchors and the fixtures are copied from `models/battuta`
+into the build's assets at build time (`copyGranitaAssets`); nothing is duplicated
+here. minSdk 24, as battuta.
 
 ## The tests
 
@@ -56,6 +88,11 @@ or an emulator:
 
 - **the model**, fed the reference pixels and context: the same top-1, logits within
   1e-3 (fp32);
+- **the personal signature** (skipped on a tflite without it): its features are the
+  reference's, and the sidecar's layer applied to them is its logits;
+- **the trainer** (likewise): the fixtures as replies stay right and near the anchors;
+  ten replies calling the quarter rest an arpeggio make it one, a reset undoes that;
+- **the replies file**: a record written and read back, musicset's keys in the file;
 - **the context** derived from the strokes: the reference vector;
 - **the rasteriser**: the size rule exactly, and the model's answer from the app's
   own drawing the same as from Pillow's. The drawing is a port of Pillow's own

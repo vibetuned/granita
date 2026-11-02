@@ -1,25 +1,38 @@
 import SwiftUI
 import UIKit
 
-/// A staff to draw on: five lines a staff space apart, a barline at each end, and a
-/// notehead where one was placed (a tap, snapped to the lines and spaces). Every
-/// other touch, Pencil or finger, is one stroke; the strokes are kept in the view's
-/// own points, the units the model then reads them in (the staff space is known).
+/// One point of a stroke as the pen gave it: where, when (ms from the drawing's first
+/// sample) and how hard (0–1 for the Pencil; nil for a finger).
+struct Sample {
+    var point: CGPoint
+    var t: Double
+    var pressure: Double?
+}
+
+/// A staff to draw on: five lines a staff space apart, a barline at each end, and the
+/// noteheads placed on it (a tap, snapped to the lines and spaces, while placing; a tap
+/// on a note takes it away). Every other touch, Pencil or finger, is one stroke; the
+/// strokes are kept in the view's own points, the units the model then reads them in
+/// (the staff space is known), with their samples' time and pressure for the dataset.
 final class StaffView: UIView {
     var staffSpace: CGFloat = 24
     private let inset: CGFloat = 24
     private(set) var strokes: [[CGPoint]] = []
-    private var current: [CGPoint] = []
-    /// The notehead's centre, in the view's points, once placed.
-    private(set) var note: CGPoint?
-    /// While set, the next touch places the notehead instead of drawing.
-    var placingNote = false
+    private(set) var samples: [[Sample]] = []
+    private var current: [Sample] = []
+    private var started: TimeInterval?
+    /// The noteheads' centres, in the view's points.
+    private(set) var notes: [CGPoint] = []
+    /// While set, a touch places a notehead — or removes the one it lands on — instead of drawing.
+    var placingNotes = false
     private var placingTouch = false
+    /// Whether the last stroke came from the Pencil.
+    private(set) var pencil = false
     var onStrokeEnd: (([[CGPoint]]) -> Void)?
-    var onNotePlaced: (() -> Void)?
+    var onNotesChanged: (() -> Void)?
 
     var staff: Staff {
-        Staff(space: staffSpace, middleY: bounds.midY, leftX: inset, rightX: bounds.maxX - inset, note: note)
+        Staff(space: staffSpace, middleY: bounds.midY, leftX: inset, rightX: bounds.maxX - inset, notes: notes)
     }
 
     override init(frame: CGRect) {
@@ -33,12 +46,14 @@ final class StaffView: UIView {
 
     func clear() {
         strokes = []
+        samples = []
         current = []
+        started = nil
         setNeedsDisplay()
     }
 
-    func removeNote() {
-        note = nil
+    func clearNotes() {
+        notes = []
         setNeedsDisplay()
     }
 
@@ -56,7 +71,7 @@ final class StaffView: UIView {
             ctx.move(to: CGPoint(x: x, y: s.middleY - 2 * s.space))
             ctx.addLine(to: CGPoint(x: x, y: s.middleY + 2 * s.space))
         }
-        if let n = note {
+        for n in notes {
             // Ledger lines from the staff out to the note.
             let steps = Int(((Double(n.y) - s.middleY) / s.space).rounded())
             if abs(steps) >= 3 {
@@ -68,7 +83,7 @@ final class StaffView: UIView {
             }
         }
         ctx.strokePath()
-        if let n = note {
+        for n in notes {
             ctx.setFillColor(UIColor(white: 0.25, alpha: 1).cgColor)
             ctx.fillEllipse(in: CGRect(x: Double(n.x) - 0.65 * s.space, y: Double(n.y) - 0.5 * s.space, width: 1.3 * s.space, height: s.space))
             // The stem: up on the right from the middle line down, else down on the left.
@@ -84,7 +99,7 @@ final class StaffView: UIView {
         ctx.setLineWidth(2.5)
         ctx.setLineCap(.round)
         ctx.setLineJoin(.round)
-        for stroke in strokes + [current] where !stroke.isEmpty {
+        for stroke in strokes + [current.map { $0.point }] where !stroke.isEmpty {
             ctx.beginPath()
             ctx.addLines(between: stroke.count == 1 ? [stroke[0], stroke[0]] : stroke)
             ctx.strokePath()
@@ -98,32 +113,45 @@ final class StaffView: UIView {
         return CGPoint(x: min(max(Double(p.x), s.leftX), s.rightX), y: s.middleY + halfSteps * s.space / 2)
     }
 
+    /// The note a tap lands on: within a space of a head's centre.
+    private func noteAt(_ p: CGPoint) -> Int? {
+        notes.firstIndex { hypot($0.x - p.x, $0.y - p.y) <= staffSpace }
+    }
+
+    private func sample(_ touch: UITouch) -> Sample {
+        let now = touch.timestamp
+        if started == nil { started = now }
+        let pressure = touch.type == .pencil && touch.maximumPossibleForce > 0 ? Double(touch.force / touch.maximumPossibleForce) : nil
+        return Sample(point: touch.location(in: self), t: (now - started!) * 1000, pressure: pressure)
+    }
+
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         guard let touch = touches.first else { return }
-        if placingNote {
+        if placingNotes {
             placingTouch = true
             return
         }
-        current = [touch.location(in: self)]
+        pencil = touch.type == .pencil
+        current = [sample(touch)]
         setNeedsDisplay()
     }
 
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
         guard let touch = touches.first, !placingTouch else { return }
         // The Pencil samples faster than the screen refreshes; take every sample.
-        let samples = event?.coalescedTouches(for: touch) ?? [touch]
-        current.append(contentsOf: samples.map { $0.location(in: self) })
+        let coalesced = event?.coalescedTouches(for: touch) ?? [touch]
+        current.append(contentsOf: coalesced.map { sample($0) })
         setNeedsDisplay()
     }
 
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
         if placingTouch {
             placingTouch = false
-            placingNote = false
             if let touch = touches.first {
-                note = snapped(touch.location(in: self))
+                let p = touch.location(in: self)
+                if let i = noteAt(p) { notes.remove(at: i) } else { notes.append(snapped(p)) }
                 setNeedsDisplay()
-                onNotePlaced?()
+                onNotesChanged?()
             }
             return
         }
@@ -139,35 +167,34 @@ final class StaffView: UIView {
     }
 
     private func finish(_ touches: Set<UITouch>) {
-        if let touch = touches.first { current.append(touch.location(in: self)) }
-        if !current.isEmpty { strokes.append(current) }
+        if let touch = touches.first { current.append(sample(touch)) }
+        if !current.isEmpty {
+            strokes.append(current.map { $0.point })
+            samples.append(current)
+        }
         current = []
         setNeedsDisplay()
         onStrokeEnd?(strokes)
     }
 }
 
-/// Whether the staff has a notehead, is waiting for a tap to place one, or has none.
-enum NoteState: Equatable {
-    case none, placing, placed
-}
-
-/// The staff in SwiftUI. Bump `generation` to clear the strokes.
+/// The staff in SwiftUI. Bump `generation` to clear the strokes, `notesGeneration` to clear the notes.
 struct StaffCanvas: UIViewRepresentable {
     @Binding var generation: Int
-    @Binding var noteState: NoteState
-    var onStrokeEnd: ([[CGPoint]], Staff) -> Void
-    var onNotePlaced: (Staff) -> Void
+    @Binding var notesGeneration: Int
+    @Binding var placingNotes: Bool
+    var onStrokeEnd: (StaffView) -> Void
+    var onNotesChanged: (StaffView) -> Void
 
     func makeUIView(context: Context) -> StaffView {
         let view = StaffView()
-        view.onStrokeEnd = { [weak view] strokes in
+        view.onStrokeEnd = { [weak view] _ in
             guard let view else { return }
-            onStrokeEnd(strokes, view.staff)
+            onStrokeEnd(view)
         }
-        view.onNotePlaced = { [weak view] in
+        view.onNotesChanged = { [weak view] in
             guard let view else { return }
-            onNotePlaced(view.staff)
+            onNotesChanged(view)
         }
         return view
     }
@@ -177,20 +204,17 @@ struct StaffCanvas: UIViewRepresentable {
             context.coordinator.generation = generation
             view.clear()
         }
-        switch noteState {
-        case .none:
-            view.placingNote = false
-            if view.note != nil { view.removeNote() }
-        case .placing:
-            view.placingNote = true
-        case .placed:
-            view.placingNote = false
+        if context.coordinator.notesGeneration != notesGeneration {
+            context.coordinator.notesGeneration = notesGeneration
+            view.clearNotes()
         }
+        view.placingNotes = placingNotes
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     final class Coordinator {
         var generation = 0
+        var notesGeneration = 0
     }
 }

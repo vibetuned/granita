@@ -10,7 +10,7 @@ plugins {
 // and the other exports there (PyTorch, ONNX, pt2) stay out of the APK.
 val granitaModels = rootProject.file("../../models/battuta")
 val copyGranitaAssets by tasks.registering(Copy::class) {
-    from(granitaModels) { include("granitanet.tflite", "granitanet.json", "fixtures.json") }
+    from(granitaModels) { include("granitanet.tflite", "granitanet.json", "fixtures.json", "anchors.json") }
     into(layout.buildDirectory.dir("granita-assets"))
 }
 
@@ -52,6 +52,8 @@ kotlin {
 dependencies {
     // The CompiledModel API (LiteRT 2.x), the user's choice over the Interpreter API.
     implementation("com.google.ai.edge.litert:litert:2.3.2")
+    // FileProvider, to hand the replies file to another app (Share).
+    implementation("androidx.core:core:1.15.0")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test:runner:1.6.2")
 }

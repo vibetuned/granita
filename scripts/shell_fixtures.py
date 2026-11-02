@@ -233,6 +233,9 @@ def main() -> None:
         with torch.no_grad():
             logits = clf.model(x, torch.from_numpy(vec)[None])[0]
             plain = clf.model(x, zero_ctx)[0]
+            # What the last layer reads, for the shells' `personal` path (its weights are in
+            # the sidecar).
+            feats = clf.model.features(x, torch.from_numpy(vec)[None])[0]
         probs = torch.softmax(logits, -1)
         best = int(probs.argmax())
         fixtures.append(
@@ -257,6 +260,7 @@ def main() -> None:
                 "pixels": glyph.flatten().tolist(),
                 "logits": [round(float(v), 5) for v in logits],
                 "logits_no_context": [round(float(v), 5) for v in plain],
+                "features": [round(float(v), 5) for v in feats],
                 "top": {
                     "label": clf.classes[best],
                     "index": best,

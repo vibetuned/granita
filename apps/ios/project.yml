@@ -9,7 +9,7 @@ name: GranitaShell
 options:
   bundleIdPrefix: com.vibetuned.granita
   deploymentTarget:
-    iOS: 16.0 # the Core ML program's floor (fp16 mlprogram)
+    iOS: 18.0 # the multi-function package's floor (MLModelConfiguration.functionName); the fp16 mlprogram alone needed 16
   createIntermediateGroups: true
 settings:
   base:
@@ -26,11 +26,16 @@ targets:
       - path: ../../models/battuta/granitanet.mlpackage
       - path: ../../models/battuta/granitanet.json
         buildPhase: resources
+      - path: ../../models/battuta/anchors.json
+        buildPhase: resources
     info:
       path: Info.plist
       properties:
         CFBundleDisplayName: granita
         UILaunchScreen: {}
+        # The replies file (Documents/replies.jsonl) in the Files app, beside the Share button.
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
         UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
     settings:

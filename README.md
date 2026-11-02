@@ -194,10 +194,19 @@ uv run python scripts/export_mobile.py --checkpoint checkpoints/granitanet_ctx/b
 
 [apps/ios](apps/ios/) (SwiftUI, Core ML) and [apps/android](apps/android/) (Kotlin, LiteRT's
 CompiledModel API) are small apps that run the released exports on a tablet: draw a symbol
-on a staff with the pen and see the top five classes, the 32 × 32 image the model saw, its
-time and the context derived from the strokes. Each carries the three steps an editor needs
-(the stroke rasteriser, the context vector, the model fed and read) and a test that checks
-them against [`models/battuta/fixtures.json`](models/battuta/fixtures.json), made by
+on a staff with the pen — with noteheads placed on it for the context — and see the top
+five classes, the 32 × 32 image the model saw, its time and the context derived from the
+strokes. Then **reply**: tap the class the drawing was (one of the five, or any from the
+list) and it is saved to `replies.jsonl` in musicset's contribution format (`musicset
+symbols --strokes`), with the staff, the notes, the context and the model's answer; Discard
+drops it; Share sends the file. **Train** retrains the model's last layer on the device from
+those replies — the `personal` function of the Core ML package / signature of the tflite
+takes the layer's weights as inputs and gives the features back — on a small class-balanced
+replay buffer of the replies, held to the anchors of [`models/battuta/anchors.json`](models/battuta/anchors.json)
+(`scripts/export_anchors.py`) and to the original weights; Reset puts the original layer
+back. Each carries the three steps an editor needs (the stroke rasteriser, the context
+vector, the model fed and read) and a test that checks them against
+[`models/battuta/fixtures.json`](models/battuta/fixtures.json), made by
 `scripts/shell_fixtures.py` from the PyTorch checkpoint. Each app's README says how to build
 and run it.
 

@@ -14,5 +14,15 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <!-- The replies file (external files/replies.jsonl), handed to another app by Share. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="com.vibetuned.granita.shell.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 </manifest>

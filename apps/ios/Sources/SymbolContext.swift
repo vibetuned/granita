@@ -7,18 +7,37 @@ struct Staff {
     var middleY: Double
     var leftX: Double
     var rightX: Double
-    /// The centre of the notehead drawn on it, if any.
-    var note: CGPoint? = nil
+    /// The centres of the noteheads drawn on it.
+    var notes: [CGPoint] = []
 
-    /// The body of that note: its notehead (1.3 x 1 staff spaces) and its 3.5-space stem,
-    /// up on the right from the middle line down, else down on the left. Granita measures
-    /// the note offsets from this box's centre.
-    var noteBody: CGRect? {
-        guard let n = note else { return nil }
+    /// The first note's centre, for the code and tests written when there was at most one.
+    var note: CGPoint? {
+        get { notes.first }
+        set { notes = newValue.map { [$0] } ?? [] }
+    }
+
+    /// The body of a note: its notehead (1.3 x 1 staff spaces) and its 3.5-space stem, up
+    /// on the right from the middle line down, else down on the left. Granita measures the
+    /// note offsets from this box's centre.
+    func body(of n: CGPoint) -> CGRect {
         let up = Double(n.y) >= middleY
         let top = Double(n.y) - (up ? 3.5 : 0.5) * space
         return CGRect(x: Double(n.x) - 0.65 * space, y: top, width: 1.3 * space, height: 4.0 * space)
     }
+
+    /// The body nearest a point — the one with the least gap to it — as granita's context
+    /// takes the nearest note; nil without notes.
+    func nearestBody(to x: Double, _ y: Double) -> CGRect? {
+        notes.map(body(of:)).min { gap($0, x, y) < gap($1, x, y) }
+    }
+
+    /// The first note's body, for the code and tests written when there was at most one.
+    var noteBody: CGRect? { note.map(body(of:)) }
+}
+
+/// How far a point is from a box, 0 inside it.
+private func gap(_ b: CGRect, _ x: Double, _ y: Double) -> Double {
+    hypot(max(Double(b.minX) - x, x - Double(b.maxX), 0), max(Double(b.minY) - y, y - Double(b.maxY), 0))
 }
 
 /// Where a mark sits in the score, in staff spaces — granita's `SymbolContext` and
@@ -51,6 +70,19 @@ struct SymbolContext: Equatable {
     /// What to send when nothing is known: all zeros, the valid flag included.
     static let unknown = [Float](repeating: 0, count: dim)
 
+    /// The facts as given (a reply's record, a test): the struct's own fields.
+    init(yStaff: Double, xMeasure: Double, barline: Double, noteDx: Double?, noteDy: Double?, width: Double, height: Double, noteW: Double? = nil, noteH: Double? = nil) {
+        self.yStaff = yStaff
+        self.xMeasure = xMeasure
+        self.barline = barline
+        self.noteDx = noteDx
+        self.noteDy = noteDy
+        self.width = width
+        self.height = height
+        self.noteW = noteW
+        self.noteH = noteH
+    }
+
     /// From strokes drawn on a staff: the note counts when its body is within `noteRange`
     /// staff spaces of the strokes' centre.
     init(strokes: [[CGPoint]], staff: Staff) {
@@ -59,7 +91,7 @@ struct SymbolContext: Equatable {
         yStaff = (cy - staff.middleY) / staff.space
         xMeasure = (cx - staff.leftX) / (staff.rightX - staff.leftX)
         barline = min(cx - staff.leftX, staff.rightX - cx) / staff.space
-        if let body = staff.noteBody {
+        if let body = staff.nearestBody(to: cx, cy) {
             let gx = max(Double(body.minX) - cx, cx - Double(body.maxX), 0) / staff.space
             let gy = max(Double(body.minY) - cy, cy - Double(body.maxY), 0) / staff.space
             let near = (gx * gx + gy * gy).squareRoot() <= Self.noteRange

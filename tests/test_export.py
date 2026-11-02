@@ -1,5 +1,6 @@
 """Unit tests for exporting Granita models to ONNX, Core ML, LiteRT, pt2 and TorchScript."""
 
+import json
 from pathlib import Path
 
 import numpy as np
@@ -161,3 +162,71 @@ def test_export_mobile_with_context_input(tmp_path: Path) -> None:
     got = interp.get_tensor(interp.get_output_details()[0]["index"])
     with torch.no_grad():
         np.testing.assert_allclose(got, model(x, ctx).numpy(), atol=1e-4, rtol=1e-3)
+
+
+def test_head_inputs_computes_the_model(tmp_path: Path) -> None:
+    """The `personal` wrapper fed the last layer's own weights is the model; another layer,
+    another answer."""
+    from granita.models.backbone import GranitaNet
+    from granita.models.export import HeadInputs, head_weights, write_sidecar
+
+    torch.manual_seed(0)
+    model = GranitaNet(num_classes=6, context_dim=CONTEXT_DIM).eval()
+    x = torch.randn(2, 1, 32, 32)
+    c = torch.randn(2, CONTEXT_DIM)
+    w, b = head_weights(model)
+    assert w.shape == (6, 128) and b.shape == (6,)
+    with torch.no_grad():
+        logits, feats = HeadInputs(model)(x, c, torch.from_numpy(w), torch.from_numpy(b))
+        assert feats.shape == (2, 128)
+        assert torch.allclose(logits, model(x, c), atol=1e-6)
+        assert torch.allclose(feats, model.features(x, c))
+        other, _ = HeadInputs(model)(x, c, torch.from_numpy(w) + 1.0, torch.from_numpy(b))
+        assert not torch.allclose(other, logits)
+    sidecar = write_sidecar(
+        tmp_path / "m.model",
+        [f"c{i}" for i in range(6)],
+        "granitanet",
+        context_dim=CONTEXT_DIM,
+        head=(w, b),
+    )
+    data = json.loads(sidecar.read_text(encoding="utf-8"))
+    head = data["head"]
+    assert head["function"] == "personal" and head["shape"] == [6, 128]
+    assert len(head["weight"]) == 6 and len(head["weight"][0]) == 128 and len(head["bias"]) == 6
+    assert abs(head["weight"][0][0] - float(w[0, 0])) < 1e-6
+
+
+def test_export_coreml_multifunction(tmp_path: Path) -> None:
+    """One mlpackage, two functions: `infer` as before (the default) and `personal`, the
+    last layer as inputs."""
+    ct = pytest.importorskip("coremltools")
+    from granita.models.backbone import GranitaNet
+    from granita.models.export import export_coreml, head_weights
+
+    torch.manual_seed(0)
+    model = GranitaNet(num_classes=5, context_dim=CONTEXT_DIM).eval()
+    out = export_coreml(model, tmp_path / "m.mlpackage", dynamic_batch=False, personal=True)
+    assert out.is_dir()
+    import platform
+
+    if platform.system() != "Darwin":
+        return
+    x = torch.randn(1, 1, 32, 32)
+    c = torch.randn(1, CONTEXT_DIM)
+    with torch.no_grad():
+        logits = model(x, c).numpy()
+        feats = model.features(x, c).numpy()
+    infer = ct.models.MLModel(str(out), compute_units=ct.ComputeUnit.CPU_ONLY).predict(
+        {"input": x.numpy(), "context": c.numpy()}
+    )
+    assert np.max(np.abs(infer["logits"] - logits)) < 0.05
+    w, b = head_weights(model)
+    personal = ct.models.MLModel(
+        str(out), compute_units=ct.ComputeUnit.CPU_ONLY, function_name="personal"
+    ).predict({"input": x.numpy(), "context": c.numpy(), "head_w": w, "head_b": b})
+    assert np.max(np.abs(personal["logits"] - logits)) < 0.05
+    assert (
+        personal["features"].shape == (1, 128)
+        and np.max(np.abs(personal["features"] - feats)) < 0.05
+    )

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- What the FileProvider may hand out: the app's external files, where replies.jsonl is. -->
+<paths>
+    <external-files-path name="files" path="." />
+    <files-path name="internal" path="." />
+</paths>

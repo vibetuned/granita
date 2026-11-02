@@ -20,6 +20,8 @@ final class FixtureTests: XCTestCase {
             let pixels: [UInt8]
             let logits: [Float]
             let logits_no_context: [Float]
+            /// What the last layer read, from the `personal` function.
+            let features: [Float]
             let top: Top
             var points: [[CGPoint]] { strokes.map { $0.map { CGPoint(x: $0[0], y: $0[1]) } } }
         }
@@ -60,6 +62,72 @@ final class FixtureTests: XCTestCase {
             print("coreml units \(units.rawValue): max |Δ| logits vs PyTorch \(worst)")
             XCTAssertLessThan(worst, 0.1, "fp16 weights: logits within 0.1 of PyTorch (units \(units.rawValue))")
         }
+    }
+
+    /// The `personal` function: the features it gives are the reference's (within fp16), and
+    /// the sidecar's last layer applied to them is the logits it gives.
+    func testPersonalFunction() throws {
+        let model = try GranitaModel(bundle: Bundle.main, computeUnits: .cpuOnly)
+        XCTAssertTrue(model.personal, "the package has no personal function")
+        let head = try XCTUnwrap(model.head)
+        XCTAssertEqual(head.classes, model.sidecar.classes.count)
+        XCTAssertEqual(head.width, 128)
+        var worstFeatures: Float = 0, worstHead: Float = 0
+        for f in Self.fixtures.fixtures {
+            let p = try model.predict(input: StrokeRaster.normalize(f.pixels), context: f.context_vector)
+            XCTAssertEqual(p.features.count, 128, f.drawn_as)
+            worstFeatures = max(worstFeatures, maxAbsDiff(p.features, f.features))
+            worstHead = max(worstHead, maxAbsDiff(head.logits(p.features), p.logits))
+        }
+        print("personal: max |Δ| features vs PyTorch \(worstFeatures), head·features vs logits \(worstHead)")
+        XCTAssertLessThan(worstFeatures, 0.1)
+        XCTAssertLessThan(worstHead, 0.05)
+    }
+
+    /// The trainer on the fixtures as replies: the layer keeps them right and stays near the
+    /// anchors; ten replies calling the quarter rest an arpeggio turn it into one — against
+    /// the interim anchors, which hold that very drawing — and a reset puts the original back.
+    func testTrainerFollowsReplies() throws {
+        let model = try GranitaModel(bundle: Bundle.main, computeUnits: .cpuOnly)
+        let origin = try XCTUnwrap(model.head)
+        let anchors = try XCTUnwrap(Anchors.load(from: Bundle.main)).anchors
+        var examples: [Example] = []
+        for f in Self.fixtures.fixtures {
+            let p = try model.predict(input: StrokeRaster.normalize(f.pixels), context: f.context_vector)
+            examples.append(Example(features: p.features, label: f.top.index))
+        }
+        var head = origin
+        let report = Trainer.train(&head, origin: origin, buffer: ReplayBuffer(replies: examples), anchors: anchors)
+        XCTAssertEqual(report.accuracy, 1)
+        XCTAssertLessThan(report.anchorDrift, 0.1)
+        let rest = try XCTUnwrap(Self.fixtures.fixtures.first { $0.drawn_as == "quarter rest" })
+        let arpeg = try XCTUnwrap(model.sidecar.classes.firstIndex(of: "arpeg"))
+        let restFeatures = try model.predict(input: StrokeRaster.normalize(rest.pixels), context: rest.context_vector).features
+        var corrected = origin
+        let wrong = ReplayBuffer(replies: examples + Array(repeating: Example(features: restFeatures, label: arpeg), count: 10))
+        XCTAssertEqual(wrong.examples.filter { $0.label == arpeg }.count, ReplayBuffer.perClass, "the buffer keeps a class's newest few")
+        _ = Trainer.train(&corrected, origin: origin, buffer: wrong, anchors: anchors)
+        model.head = corrected
+        XCTAssertEqual(try model.predict(input: StrokeRaster.normalize(rest.pixels), context: rest.context_vector).top.first?.label, "arpeg")
+        model.head = origin
+        XCTAssertEqual(try model.predict(input: StrokeRaster.normalize(rest.pixels), context: rest.context_vector).top.first?.label, "restQuarter")
+    }
+
+    /// A reply written and read back, musicset's keys in the file, its context whole.
+    func testRepliesRoundTrip() throws {
+        let dir = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("granita-replies-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let store = Annotations(directory: dir, defaults: try XCTUnwrap(UserDefaults(suiteName: "granita.tests")))
+        XCTAssertEqual(store.count, 0)
+        let ctx = SymbolContext(yStaff: -0.1, xMeasure: 0.5, barline: 12.4, noteDx: -1, noteDy: 1.4, width: 1.6, height: 2.6, noteW: 1.3, noteH: 4)
+        try store.append(Reply(label: "accidentalSharp", writer: store.writer, staffSpace: 24, strokes: [[[395, 255, 0, 0.5], [410, 275, 16, 0.6]]], context: Reply.Context(ctx), staff: Reply.StaffRecord(space: 24, middleY: 300, leftX: 100, rightX: 700), notes: [[424, 300]], fraction: 0.889, predicted: Reply.Predicted(label: "accidentalSharp", confidence: 0.9), device: "apple-pencil", app: "granita-shell/ios", time: Annotations.now()))
+        XCTAssertEqual(store.count, 1)
+        let text = try String(contentsOf: store.url, encoding: .utf8)
+        XCTAssertTrue(text.contains("\"staff_space\":24") && text.contains("\"note_dx\":-1") && text.contains("\"label\":\"accidentalSharp\""), text)
+        let back = try XCTUnwrap(store.all().first)
+        XCTAssertEqual(back.strokes, [[[395, 255, 0, 0.5], [410, 275, 16, 0.6]]])
+        XCTAssertEqual(SymbolContext(back.context).vector, ctx.vector)
+        XCTAssertEqual(Annotations(directory: dir, defaults: try XCTUnwrap(UserDefaults(suiteName: "granita.tests"))).count, 1)
     }
 
     /// The context derived from strokes on the fixture staff, with its notehead when

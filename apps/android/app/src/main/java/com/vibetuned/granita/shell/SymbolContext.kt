@@ -14,20 +14,35 @@ class Staff(
     val middleY: Double,
     val leftX: Double,
     val rightX: Double,
-    /** The centre of the notehead drawn on it, if any. */
-    val note: PointF? = null,
+    /** The centres of the noteheads drawn on it. */
+    val notes: List<PointF> = emptyList(),
 ) {
+    /** The staff with one note at most, as the code and tests written then make it. */
+    constructor(space: Double, middleY: Double, leftX: Double, rightX: Double, note: PointF?) :
+        this(space, middleY, leftX, rightX, listOfNotNull(note))
+
+    /** The first note's centre, for the code written when there was at most one. */
+    val note: PointF? get() = notes.firstOrNull()
+
     /**
-     * The body of that note as (left, top, right, bottom): its notehead (1.3 x 1 staff
-     * spaces) and its 3.5-space stem, up on the right from the middle line down, else down
-     * on the left. Granita measures the note offsets from this box's centre.
+     * The body of a note as (left, top, right, bottom): its notehead (1.3 x 1 staff spaces)
+     * and its 3.5-space stem, up on the right from the middle line down, else down on the
+     * left. Granita measures the note offsets from this box's centre.
      */
-    fun noteBody(): DoubleArray? {
-        val n = note ?: return null
+    fun body(n: PointF): DoubleArray {
         val up = n.y >= middleY
         val top = n.y - (if (up) 3.5 else 0.5) * space
         return doubleArrayOf(n.x - 0.65 * space, top, n.x + 0.65 * space, top + 4.0 * space)
     }
+
+    /** The body nearest a point — the least gap to it — as granita's context takes the nearest note; null without notes. */
+    fun nearestBody(x: Double, y: Double): DoubleArray? = notes.map { body(it) }.minByOrNull { gap(it, x, y) }
+
+    /** The first note's body, for the code and tests written when there was at most one. */
+    fun noteBody(): DoubleArray? = note?.let { body(it) }
+
+    private fun gap(b: DoubleArray, x: Double, y: Double): Double =
+        hypot(maxOf(b[0] - x, x - b[2], 0.0), maxOf(b[1] - y, y - b[3], 0.0))
 }
 
 /**
@@ -111,7 +126,7 @@ data class SymbolContext(
             var noteDy: Double? = null
             var noteW: Double? = null
             var noteH: Double? = null
-            staff.noteBody()?.let { (left, top, right, bottom) ->
+            staff.nearestBody(b.centreX, b.centreY)?.let { (left, top, right, bottom) ->
                 val gx = maxOf(left - b.centreX, b.centreX - right, 0.0) / staff.space
                 val gy = maxOf(top - b.centreY, b.centreY - bottom, 0.0) / staff.space
                 if (hypot(gx, gy) <= NOTE_RANGE) {

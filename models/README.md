@@ -37,11 +37,12 @@ both share they tie, and the test writers differ between the two builds (results
 
 | file | what it is | checked against PyTorch |
 |---|---|---|
-| `granitanet.mlpackage/` | Core ML program, iOS 16+, fp16 weights (3.9 MB) | not checkable on Linux; re-run the `apps/ios` tests (the previous release: max abs. diff 3.6e-02 to 4.5e-02 on the iPad simulator, the same top-1 on every fixture) |
-| `granitanet.tflite` | LiteRT / TFLite, static batch 1 (7.7 MB) | max abs. diff 1.6e-06; re-run the `apps/android` tests on a device |
+| `granitanet.mlpackage/` | Core ML program, fp16 weights (3.9 MB), **two functions** since 2026-11-02: `infer` (the default: `input`, `context` → `logits`, as before) and `personal` (`input`, `context`, `head_w`, `head_b` → `logits`, `features`), which makes it iOS 18+ | on this Mac: max abs. diff 1.3e-02 on both functions (CPU); the `apps/ios` tests on a device: the previous release 3.6e-02 to 4.5e-02 on the simulator, the same top-1 on every fixture |
+| `granitanet.tflite` | LiteRT / TFLite, static batch 1 (7.7 MB); **to be re-exported on Linux** with the `personal` signature next to `serving_default` (`scripts/export_mobile.py --formats litert`, which also writes the signatures' tensor names into the sidecar) — the file here is the single-signature one still | max abs. diff 1.6e-06; re-run the `apps/android` tests on a device |
 | `granitanet.onnx` | ONNX opset 18, dynamic batch (7.8 MB) | max abs. diff 1.4e-06 |
 | `granitanet.pt2` | `torch.export` program, dynamic batch (7.9 MB) | exact |
-| `granitanet.json` | sidecar: class list, groups, input and output spec, stroke rasterisation rules, context features and the note-body definition, the tflite's tensor names | |
+| `granitanet.json` | sidecar: class list, groups, input and output spec, stroke rasterisation rules, context features and the note-body definition, the tflite's tensor names (per signature, once re-exported), and `head`: the last layer's weights `(43 × 128)` and bias, what an app's `personal` copy starts from | |
+| `anchors.json` | feature vectors the model read with its own logits, `label` an index into `classes` (`scripts/export_anchors.py`): what the shells' on-device trainer holds the retrained layer to. **Interim: the 13 fixtures**; the real set comes from the dataset's val split, K per class (`--data`), on the machine that has it | |
 | `fixtures.json` | 13 stroke sets on a staff, six beside a note, with the note's body, their context, rendered image and logits (`scripts/shell_fixtures.py`), for the mobile test shells in `apps/`. The `barline` and `half rest` fixtures now read as `fing1` and `articTenutoAbove`: battuta has neither class, and the fixtures pin numbers, not accuracy | |
 | `best_model.pt` | PyTorch checkpoint (weights only) for `GranitaClassifier.from_checkpoint` and re-export | |
 | `history.json`, `eval_test.md`, `eval_tablet.md`, `context_effect.md` | training curve, test tables, the stylus-only benchmark | |
@@ -78,10 +79,25 @@ sidecar spells out every rule; in short:
    too.
 
 All three steps are implemented in Swift and in Kotlin in the test shells (`apps/ios`,
-`apps/android`), whose placed note is a notehead with a 3.5-space stem, and are checked
-against `fixtures.json`. The note-body context was ported to both shells with this release
-and has not been compiled or run on a device yet. Regenerating `fixtures.json` on another
+`apps/android`), whose placed notes are noteheads with a 3.5-space stem (the nearest
+counts), and are checked against `fixtures.json`. Regenerating `fixtures.json` on another
 machine reproduces the pixels and contexts exactly and the logits to within 1e-05.
+
+### The `personal` function: the last layer in the app's hands
+
+Since 2026-11-02 the exports carry a second entry point for an app that trains the last
+layer on its users' replies without touching the network: the Core ML package's function
+`personal` (`MultiFunctionDescriptor`, the default function `infer` unchanged) and the
+tflite's signature of that name (`litert_torch.signature`, next to `serving_default`).
+It takes `head_w` `(43, 128)` and `head_b` `(43)` with the image and the context, and
+gives `logits` `(1, 43)` and `features` `(1, 128)` — what that layer read. Fed the
+sidecar's `head` it computes exactly what `infer` does; fed a trained copy, the app's
+own classifier, the whole network still on the accelerator (`HeadInputs` in
+`granita.models.export`, `GranitaNet.features`). The shells train that copy with plain
+gradient steps on a small replay buffer of the replies, the anchors of `anchors.json`
+holding the layer to the released model's answers and an L2 term to its weights
+(`apps/ios/Sources/Head.swift`, `apps/android/.../Head.kt`). `fixtures.json` carries each
+fixture's `features` for the shells' tests.
 
 ## kakigori (training run `kakigori_v8`)
 
