@@ -2,9 +2,18 @@
 
 A lightweight, high-performance music symbol and glyph classifier for score editors and Optical Music Recognition (OMR).
 
-Granita's first job is **handwriting recognition in the [Battuta](https://battuta.vibetuned.com/) editor**: the user draws a symbol with a stylus, the strokes are rasterised exactly like the training data (`GranitaClassifier.predict_strokes`), and the predicted class is pushed back to the editor, which inserts it into the score. A **conditioning vector** describes *where* in the score the stroke was drawn (staff position, place in the measure, nearest notehead, size, all in staff spaces; `granita.context` mirrors `musicset.context`), so the same pen mark can mean different things in different places: a dot beside a notehead is an augmentation dot, above it a staccato. Train with `--context`; the model still works when the editor sends none.
+Granita's first job is **handwriting recognition in the [Battuta](https://battuta.vibetuned.com/) editor**: the user draws a symbol with a stylus, the strokes are rasterised exactly like the training data (`GranitaClassifier.predict_strokes`), and the predicted class is pushed back to the editor, which inserts it into the score. A **conditioning vector** describes *where* in the score the stroke was drawn (staff position, place in the measure, the nearest note, size, all in staff spaces; `granita.context` mirrors `musicset.context`), so the same pen mark can mean different things in different places: a dot beside a note is an augmentation dot, above it a staccato. Train with `--context`; the model still works when the editor sends none.
 
-It also serves as a second stage for an OMR detector: `GranitaClassifier.predict_box` classifies the glyph inside a detection box with the same crop protocol [musicset](https://github.com/vibetuned/musicset) uses to build the training crops, for example to resolve a single `fing` box into `fing1`..`fing5`. It classifies 51 musical symbols: fingerings, ornaments, articulations, accidentals, dynamics and pedal marks, plus notes by duration, rests, clefs, barlines and augmentation dots. Time signatures are deliberately left out: stacked digits confused every other class, fingerings above all.
+It also serves as a second stage for an OMR detector: `GranitaClassifier.predict_box` classifies the glyph inside a detection box with the same crop protocol [musicset](https://github.com/vibetuned/musicset) uses to build the training crops, for example to resolve a single `fing` box into `fing1`..`fing5`.
+
+Granita ships two variants, one per consumer, built from musicset's `--profile` class sets:
+
+| variant | classes | trained on | context | released in |
+|---|---|---|---|---|
+| **battuta** | 43: what a stylus user draws in the editor | SMuFL fonts, stroke templates, score crops, HOMUS pen strokes, EMNIST handwriting | yes | [models/battuta](models/battuta/) |
+| **kakigori** | 56: the whole catalog | SMuFL fonts and score crops only (engraved) | no | [models/kakigori](models/kakigori/) |
+
+The battuta set leaves out every rest but the quarter (the editor infers a rest's duration from the measure), the double accidentals, `dynamicMezzo` and `dynamicZ` (only parts of `mp`, `mf`, `sfz`), `pedal`, `note32nd`, `note64th` and `barlineSingle`. Time signatures are in neither: stacked digits confused every other class, fingerings above all.
 
 ---
 
@@ -21,7 +30,7 @@ Granita includes five distinct model families tailored for $32 \times 32$ single
 | **`tiny`** | `tiny` | Ultra-compact 3-stage CNN (~80k parameters) for microsecond latency in interactive editing tools. |
 
 - **Astral Toolchain**: Built with the classic `uv`, `ruff`, and `ty` toolchain.
-- **OMR Semantic Grouping**: Tracks and reports metrics across 10 musical categories (51 classes):
+- **OMR Semantic Grouping**: Tracks and reports metrics across 11 musical categories (the 56 kakigori classes; battuta's 43 are a subset, `granita.config.VARIANTS`):
   - **Fingering**: `fing1`, `fing2`, `fing3`, `fing4`, `fing5`
   - **Ornament**: `trill`, `mordent`, `turn`, `fermata`, `arpeg`
   - **Articulation**: `articStaccatoAbove`, `articTenutoAbove`, `articAccentAbove`, `articStaccatissimoAbove`, `articMarcatoAbove`
@@ -32,8 +41,9 @@ Granita includes five distinct model families tailored for $32 \times 32$ single
   - **Rest**: `restWholeHalf`, `restQuarter`, `rest8th`, `rest16th`, `rest32nd`, `rest64th`
   - **Clef**: `gClef`, `fClef`, `cClef`
   - **Barline**: `barlineSingle`
+  - **Navigation**: `dalSegno` (D.S.), `daCapo` (D.C.), `fine`, `segno`, `coda`
 - **Data Integrations**: Natively loads the compressed `.npz` archives that `musicset symbols` writes (`dataset.npz` next to `labels.json`) and standard `ImageFolder` directory hierarchies.
-- **Per-source metrics**: `musicset symbols` tags every sample as `font` (SMuFL glyph render), `stroke` (stylus stroke template), `crop` (real score crop), `hand` (real pen strokes from HOMUS, whose 100 writers never straddle splits) or `emnist` (real handwritten digits and letters composed into fingerings and dynamics, EMNIST's test writers held out); training logs, `eval` and the ablation report break accuracy down by source, so the **hand** column on the test split is a writer-held-out handwriting number and **stroke** the synthetic one.
+- **Per-source metrics**: `musicset symbols` tags every sample as `font` (SMuFL glyph render), `stroke` (stylus stroke template), `crop` (real score crop), `hand` (real pen strokes from HOMUS, whose 100 writers never straddle splits, and codas composed from each writer's own strokes) or `emnist` (real handwritten digits and letters composed into fingerings, dynamics, D.S., D.C. and Fine, plus codas, segni and turns built from letters; EMNIST's test writers held out); training logs, `eval` and the ablation report break accuracy down by source, so the **hand** column on the test split is a writer-held-out handwriting number and **stroke** the synthetic one.
 - **Export Ready**: Export any model family to ONNX (ONNX Runtime, browsers), Apple Core ML (`.mlpackage`), Google LiteRT (`.tflite`), `torch.export` (`.pt2`) or TorchScript (deprecated upstream).
 
 ---
@@ -77,9 +87,17 @@ uv run granita info
 ```
 
 ### 2. Building the dataset
-`musicset symbols` (from the `data` extra) synthesises SMuFL glyphs and stylus stroke templates, crops real symbols from built musicset score datasets, and mixes in real handwriting: pen strokes from the HOMUS dataset (Calvo-Zaragoza & Oncina, 2014; 15,200 symbols drawn on a tablet by 100 writers) and, since HOMUS has no fingerings or dynamics, digits and letters from EMNIST (Cohen et al., 2017, the `byclass` split) composed into `3`, `mp`, `sfz`, ... Both are downloaded separately. Crops are split **by score**, HOMUS by writer and EMNIST by its own train/test writers, byte-identical images are kept in one split only, and every sample carries its source and its conditioning vector.
+`musicset symbols` (from the `data` extra) synthesises SMuFL glyphs and stylus stroke templates, crops real symbols from built musicset score datasets, and mixes in real handwriting: pen strokes from the HOMUS dataset (Calvo-Zaragoza & Oncina, 2014; 15,200 symbols drawn on a tablet by 100 writers) and, since HOMUS has no fingerings, dynamics or navigation marks, digits and letters from EMNIST (Cohen et al., 2017, the `byclass` split) composed into `3`, `mp`, `sfz`, `D.C.`, `Fine`, ..., with the coda (`O` crossed by an `X` turned upright), the segno (slashed `S` with two dots) and the turn (mirrored `S` on its side) built from letters. Both are downloaded separately. Crops are split **by score**, HOMUS by writer and EMNIST by its own train/test writers, byte-identical images are kept in one split only, and every sample carries its source and its conditioning vector.
 ```bash
-# synthetic symbols + real crops from one or more built musicset datasets
+# the two variants' training sets
+uv run musicset symbols data/symbols-battuta --profile battuta -n 2000 \
+    --from-dataset path/to/built-dataset-a path/to/built-dataset-b --max-crops-per-class 500 \
+    --homus path/to/HOMUS.zip --homus-copies 2 --emnist path/to/emnist --emnist-per-class 1000 \
+    --context-p 0.7 --workers 8
+uv run musicset symbols data/symbols-kakigori --profile kakigori -n 2000 \
+    --from-dataset path/to/built-dataset-a path/to/built-dataset-b --max-crops-per-class 500 --workers 8
+
+# the pieces one at a time: synthetic symbols + real crops from built musicset datasets
 uv run musicset symbols data/symbols -n 2000 \
     --from-dataset path/to/built-dataset-a path/to/built-dataset-b \
     --max-crops-per-class 500 --preset mixed --workers 8
@@ -93,16 +111,17 @@ uv run musicset symbols data/symbols -n 2000 --homus path/to/HOMUS.zip --emnist 
 # contributions from your own editor (JSON Lines, see the musicset README), split by contributor
 uv run musicset symbols data/symbols -n 2000 --homus path/to/HOMUS.zip --strokes path/to/contributions.jsonl
 
-# stylus-only evaluation set (different seed, so no overlap with the main set)
-uv run musicset symbols data/symbols-tablet -n 300 --preset tablet --seed 1 --split 0 0 1 --no-png
+# stylus-only evaluation set for battuta (different seed, so no overlap with the main set)
+uv run musicset symbols data/symbols-battuta-tablet --profile battuta -n 300 --preset tablet \
+    --seed 1 --split 0 0 1 --no-png
 ```
 
 ### 3. Training a Specific Backbone
 Train any architecture (`regla`, `iformer`, `lsnet`, `granitanet`, `tiny`, or their `_t` / `_s` variants):
 ```bash
 uv run granita train \
-    --data data/symbols/dataset.npz \
-    --output-dir checkpoints/granitanet_ctx \
+    --data data/symbols-battuta/dataset.npz \
+    --output-dir checkpoints/battuta_ctx \
     --model granitanet \
     --context \
     --epochs 15 \
@@ -138,8 +157,9 @@ Classify an isolated glyph image, or the pen strokes an editor captured (JSON `[
 uv run granita infer --checkpoint checkpoints/granitanet_ctx/best_model.pt --image path/to/glyph.png --top-k 5
 uv run granita infer --checkpoint checkpoints/granitanet_ctx/best_model.pt --strokes strokes.json --staff-space 12
 uv run granita infer --checkpoint checkpoints/granitanet_ctx/best_model.pt --strokes strokes.json --staff-space 12 \
-    --context '{"y_staff": -2.5, "x_measure": 0.4, "barline": 3.0, "note_dx": 0.1, "note_dy": -1.6}'
+    --context '{"y_staff": -2.5, "x_measure": 0.4, "barline": 3.0, "note_dx": 0.1, "note_dy": -3.1, "note_w": 1.2, "note_h": 4.0}'
 ```
+`note_dx` / `note_dy` are the symbol's centre minus the centre of the nearest note's **body**: the bounding box of its notehead, stem and flag, or of all the noteheads and the stem of its chord, without accidentals, dots or articulations; `note_w` / `note_h` are that box's size. Measuring from the body rather than the notehead keeps the offsets independent of which way the stem points.
 `--staff-space` (pixels between two staff lines in the strokes' units) keeps the drawing at its natural size; without it `--fraction` sets the glyph's span as a fraction of the canvas. `--brush` renders a pressure-like brush instead of a uniform pen (the uniform pen scored better, see the results). `scripts/stroke_style_sweep.py` scores a checkpoint on the held-out HOMUS writers in `strokes_test.json` under several pen and brush styles.
 
 ### 7. Model Export
@@ -168,7 +188,7 @@ uv run python scripts/export_mobile.py --checkpoint checkpoints/granitanet_ctx/b
 
 ## Released models
 
-[models/](models/) holds the released weights and their exports, tracked in git on purpose so a checkout has everything an app needs: the checkpoint, Core ML, LiteRT, ONNX and pt2 files, the sidecar and the test tables. [models/README.md](models/README.md) documents the inputs and the stroke rasterisation rules for the editor.
+[models/](models/) holds the released weights and their exports, tracked in git on purpose so a checkout has everything an app needs: for battuta the checkpoint, Core ML, LiteRT, ONNX and pt2 files, the sidecar and the test tables; for kakigori the checkpoint, ONNX, pt2 and the sidecar. [models/README.md](models/README.md) documents the inputs and the stroke rasterisation rules for the editor.
 
 ## Mobile test shells
 
@@ -177,7 +197,7 @@ CompiledModel API) are small apps that run the released exports on a tablet: dra
 on a staff with the pen and see the top five classes, the 32 × 32 image the model saw, its
 time and the context derived from the strokes. Each carries the three steps an editor needs
 (the stroke rasteriser, the context vector, the model fed and read) and a test that checks
-them against [`models/granitanet/fixtures.json`](models/granitanet/fixtures.json), made by
+them against [`models/battuta/fixtures.json`](models/battuta/fixtures.json), made by
 `scripts/shell_fixtures.py` from the PyTorch checkpoint. Each app's README says how to build
 and run it.
 
@@ -195,17 +215,20 @@ from granita import GranitaClassifier, create_model
 from granita.context import context_from_strokes
 
 # Instantiate any model architecture for custom pipelines
-model = create_model("granitanet", num_classes=51, context_dim=16)
+model = create_model("granitanet", num_classes=43, context_dim=16)
 
 # Or load a trained classifier from a checkpoint
-classifier = GranitaClassifier.from_checkpoint("models/granitanet/best_model.pt")
+classifier = GranitaClassifier.from_checkpoint("models/battuta/best_model.pt")
 
 image = Image.open("glyph.png")
 pred = classifier.predict(image, top_k=3)  # isolated glyph (padded to square, never squashed)
 pred = classifier.predict_strokes(strokes, top_k=3, staff_space=12.0)  # editor pen strokes, natural size
-ctx = context_from_strokes(strokes, 12.0, y_staff=-2.5, note_dx=0.1, note_dy=-1.6)  # where it was drawn
+ctx = context_from_strokes(  # where it was drawn, relative to the nearest note's body
+    strokes, 12.0, y_staff=-2.5, note_dx=0.1, note_dy=-3.1, note_w=1.2, note_h=4.0
+)
 pred = classifier.predict_strokes(strokes, staff_space=12.0, context=ctx)
-pred = classifier.predict_box(page, (x1, y1, x2, y2))  # a detection box on a page image
+omr = GranitaClassifier.from_checkpoint("models/kakigori/best_model.pt")
+pred = omr.predict_box(page, (x1, y1, x2, y2))  # a detection box on a page image
 
 print(f"Symbol:     {pred.label}")
 print(f"Category:   {pred.group}")

@@ -42,6 +42,12 @@ def write_sidecar(
             "input": "context",
             "features": list(CONTEXT_FEATURES),
             "units": "staff spaces, scaled by granita.context.context_vector",
+            "note": "note_* features describe the nearest note's body: the bounding box of "
+            "its notehead, stem and flag, or of every notehead plus the stem and flag of its "
+            "chord, without accidentals, dots or articulations; note_dx / note_dy are the "
+            "symbol centre minus that box's centre, note_above / note_below mean the centre "
+            "is above its top / below its bottom within 0.5 spaces of its sides, note_left / "
+            "note_right left / right of its sides within 0.5 spaces of its top and bottom",
             "unknown": "all zeros (valid = 0)",
         }
         if context_dim

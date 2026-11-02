@@ -4,12 +4,13 @@ A few stroke sets drawn on a staff, rendered and classified by the released
 PyTorch checkpoint, so each shell can check its own rasteriser and its exported
 model (Core ML, LiteRT) against the reference:
 
-    uv run python scripts/shell_fixtures.py        # -> models/granitanet/fixtures.json
+    uv run python scripts/shell_fixtures.py        # -> models/battuta/fixtures.json
 
 Each fixture carries the strokes in page pixels, the staff they were drawn on
 (staff space, middle line, barlines) and, for some, the centre of a notehead on
-it; the context the shells derive from them (raw facts and the 16-float vector,
-the note offsets when the notehead is within 8 spaces); the 32 x 32 image
+it with the body the shells draw for it (head and stem, ``note_body``); the
+context the shells derive from them (raw facts and the 16-float vector, the
+offsets from the body's centre when the body is within 8 spaces); the 32 x 32 image
 ``render_strokes`` makes (uniform pen, natural size from the staff space); and
 the checkpoint's logits, with and without the context. The shapes are polylines,
 not handwriting: the fixtures pin numbers, not accuracy, and ``drawn_as`` is only
@@ -138,17 +139,35 @@ FIXTURES: list[tuple[str, list[Stroke], Note]] = [
 ]
 
 
+def note_body(note: Note) -> tuple[float, float, float, float] | None:
+    """The body the shells draw for a notehead centred at ``note``: the head, 1.3 x 1
+    staff spaces, and a 3.5-space stem, up on the right from the middle line down, else
+    down on the left, as ``(left, top, right, bottom)`` page pixels."""
+    if note is None:
+        return None
+    x, y = note
+    top = y - (3.5 if y >= MIDDLE_Y else 0.5) * STAFF_SPACE
+    return (x - 0.65 * STAFF_SPACE, top, x + 0.65 * STAFF_SPACE, top + 4.0 * STAFF_SPACE)
+
+
 def symbol_context(strokes: list[Stroke], note: Note) -> SymbolContext:
-    """The context a shell derives from strokes on the fixture staff, the notehead's
-    offset when it is within ``NOTE_RANGE`` staff spaces of the symbol's centre."""
+    """The context a shell derives from strokes on the fixture staff: the offset from the
+    centre of the note's body (``note_body``) when the body is within ``NOTE_RANGE`` staff
+    spaces of the symbol's centre."""
     xs = [x for s in strokes for x, _ in s]
     ys = [y for s in strokes for _, y in s]
     cx, cy = 0.5 * (min(xs) + max(xs)), 0.5 * (min(ys) + max(ys))
-    note_dx = note_dy = None
-    if note is not None:
-        dx, dy = (cx - note[0]) / STAFF_SPACE, (cy - note[1]) / STAFF_SPACE
-        if math.hypot(dx, dy) <= NOTE_RANGE:
-            note_dx, note_dy = dx, dy
+    note_dx = note_dy = note_w = note_h = None
+    body = note_body(note)
+    if body is not None:
+        left, top, right, bottom = body
+        gx = max(left - cx, cx - right, 0.0) / STAFF_SPACE
+        gy = max(top - cy, cy - bottom, 0.0) / STAFF_SPACE
+        if math.hypot(gx, gy) <= NOTE_RANGE:
+            note_dx = (cx - 0.5 * (left + right)) / STAFF_SPACE
+            note_dy = (cy - 0.5 * (top + bottom)) / STAFF_SPACE
+            note_w = (right - left) / STAFF_SPACE
+            note_h = (bottom - top) / STAFF_SPACE
     return SymbolContext(
         y_staff=(cy - MIDDLE_Y) / STAFF_SPACE,
         x_measure=(cx - LEFT_X) / (RIGHT_X - LEFT_X),
@@ -157,6 +176,8 @@ def symbol_context(strokes: list[Stroke], note: Note) -> SymbolContext:
         note_dy=note_dy,
         width=(max(xs) - min(xs)) / STAFF_SPACE,
         height=(max(ys) - min(ys)) / STAFF_SPACE,
+        note_w=note_w,
+        note_h=note_h,
     )
 
 
@@ -192,8 +213,8 @@ def downsample_like_pil(img: np.ndarray, size: int = SIZE_PX) -> np.ndarray:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
-    parser.add_argument("--checkpoint", default="models/granitanet/best_model.pt")
-    parser.add_argument("--output", default="models/granitanet/fixtures.json")
+    parser.add_argument("--checkpoint", default="models/battuta/best_model.pt")
+    parser.add_argument("--output", default="models/battuta/fixtures.json")
     args = parser.parse_args()
 
     clf = GranitaClassifier.from_checkpoint(args.checkpoint, device="cpu")
@@ -219,6 +240,7 @@ def main() -> None:
                 "drawn_as": drawn_as,
                 "strokes": [[[x, y] for x, y in s] for s in strokes],
                 "note": list(note) if note is not None else None,
+                "note_body": list(note_body(note) or []) or None,
                 "fraction": round(fraction, 6),
                 "context": {
                     "y_staff": ctx.y_staff,
@@ -226,6 +248,8 @@ def main() -> None:
                     "barline": ctx.barline,
                     "note_dx": ctx.note_dx,
                     "note_dy": ctx.note_dy,
+                    "note_w": ctx.note_w,
+                    "note_h": ctx.note_h,
                     "width": ctx.width,
                     "height": ctx.height,
                 },

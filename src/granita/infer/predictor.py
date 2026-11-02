@@ -402,6 +402,7 @@ class GranitaClassifier:
                 span = max(max(xs) - min(xs), max(ys) - min(ys)) if points else 0.0
                 staff_space = max(span, 1e-6) / (CANVAS_STAFF_SPACES * fraction)
             dx, dy = context.get("note_dx"), context.get("note_dy")
+            nw, nh = context.get("note_w"), context.get("note_h")
             context = context_from_strokes(
                 strokes,
                 staff_space,
@@ -410,6 +411,8 @@ class GranitaClassifier:
                 barline=float(context.get("barline", NOTE_RANGE)),
                 note_dx=None if dx is None else float(dx),
                 note_dy=None if dy is None else float(dy),
+                note_w=None if nw is None else float(nw),
+                note_h=None if nh is None else float(nh),
             )
         glyph = render_strokes(
             strokes, size, fraction=fraction, pen_width=pen_width, brush=brush, paper=self.paper

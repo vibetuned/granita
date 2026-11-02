@@ -229,3 +229,35 @@ def test_render_strokes_brush_mode() -> None:
     assert len(np.unique(brush)) > len(np.unique(pen))  # soft edge adds grey levels
     clf = _classifier(["a", "b"])
     assert clf.predict_strokes(strokes, brush=True).label in ("a", "b")
+
+
+def test_context_flags_follow_the_note_body() -> None:
+    from granita.context import SymbolContext, context_from_mapping, context_vector
+
+    def flags(dx: float, dy: float, w: float | None = 1.2, h: float | None = 4.0) -> tuple:
+        ctx = SymbolContext(0.0, 0.5, 4.0, dx, dy, 0.4, 0.4, note_w=w, note_h=h)
+        v = context_vector(ctx)
+        return tuple(float(x) for x in v[8:12])  # above, below, left, right
+
+    # a stem-up quarter: body 1.2 x 4 spaces, centre 1.5 spaces above the notehead
+    assert flags(1.2, 1.4) == (0.0, 0.0, 0.0, 1.0)  # augmentation dot beside the head
+    assert flags(0.0, 2.6) == (0.0, 1.0, 0.0, 0.0)  # staccato under the head
+    assert flags(0.0, -2.6) == (1.0, 0.0, 0.0, 0.0)  # fingering over the stem
+    assert flags(-1.3, 1.5) == (0.0, 0.0, 1.0, 0.0)  # sharp before the head
+    assert flags(2.0, -3.0) == (0.0, 0.0, 0.0, 0.0)  # diagonal: no side
+    # without a body size (an older record) the body is a point
+    assert flags(0.3, -1.0, None, None) == (1.0, 0.0, 0.0, 0.0)
+    mapped = context_from_mapping(
+        {
+            "y_staff": 0.0,
+            "width": 0.4,
+            "height": 0.4,
+            "note_dx": 1.2,
+            "note_dy": 1.4,
+            "note_w": 1.2,
+            "note_h": 4.0,
+        }
+    )
+    assert mapped.note_w == 1.2 and context_vector(mapped)[11] == 1.0
+    far = context_from_mapping({"y_staff": 0.0, "width": 0.4, "height": 0.4, "note_dx": None})
+    assert far.note_w is None and context_vector(far)[7] == 0.0

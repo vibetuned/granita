@@ -31,6 +31,8 @@ PAIRS = [
     ("noteWhole", "augmentationDot"),
     ("restQuarter", "accidentalNatural"),
     ("noteQuarter", "noteHalf"),
+    ("fing1", "articStaccatissimoAbove"),
+    ("note8th", "note16th"),
 ]
 
 
@@ -116,7 +118,9 @@ def main() -> None:
                 "macro_f1": m.macro_f1,
                 "source_accuracy": m.source_accuracy,
                 "pair_errors": {
-                    f"{a}|{b}": pair_errors(m, classes, a, b) for a, b in PAIRS if a in classes
+                    f"{a}|{b}": pair_errors(m, classes, a, b)
+                    for a, b in PAIRS
+                    if a in classes and b in classes
                 },
             }
             for name, m in columns.items()

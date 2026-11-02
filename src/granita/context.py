@@ -17,13 +17,12 @@ import numpy as np
 from granita.config import CONTEXT_DIM, CONTEXT_FEATURES
 
 NOTE_RANGE = 8.0
-"""Staff spaces within which a notehead counts as the symbol's neighbour."""
+"""Staff spaces within which a note's body counts as the symbol's neighbour."""
 STAFF_HALF_HEIGHT = 2.0
 """Staff spaces from the middle line to the outer lines: the ``in_staff`` zone."""
-NOTE_SIDE = 0.5
-"""Offset in staff spaces beyond which the symbol counts as beside, above or below the note."""
-NOTE_COLUMN = 1.0
-"""Horizontal offset within which the symbol counts as in the note's column."""
+NOTE_MARGIN = 0.5
+"""Staff spaces a symbol may stick out past a body's sides and still count as above or
+below it (or past its top and bottom and still count as left or right of it)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,21 +37,32 @@ class SymbolContext:
     """Distance to the nearest barline."""
     note_dx: float | None
     note_dy: float | None
-    """Symbol centre minus the nearest other notehead's centre; ``None`` without one."""
+    """Symbol centre minus the centre of the nearest note's body; ``None`` without one.
+
+    A note's body is the bounding box of its notehead, stem and flag, or of every
+    notehead plus the stem and flag of its chord, without accidentals, dots or
+    articulations: the note as the editor shows it before the mark is added."""
     width: float
     height: float
+    note_w: float | None = None
+    note_h: float | None = None
+    """Width and height of that body (``None`` or 0: a point)."""
 
 
 def context_vector(ctx: SymbolContext | None) -> np.ndarray:
     """``CONTEXT_DIM`` float32 features for ``ctx`` (see ``CONTEXT_FEATURES``); all zero
     when ``None``. Flags: the staff zone (in / above / below the lines) and where the
-    nearest notehead is (symbol above / below / left / right of it)."""
+    symbol is relative to the nearest note's body (above its top, below its bottom, left
+    or right of its sides)."""
     if ctx is None:
         return np.zeros(CONTEXT_DIM, dtype=np.float32)
     has_note = ctx.note_dx is not None and ctx.note_dy is not None
     dx = ctx.note_dx if ctx.note_dx is not None else 0.0
     dy = ctx.note_dy if ctx.note_dy is not None else 0.0
-    in_column = has_note and abs(dx) < NOTE_COLUMN
+    hw = 0.5 * (ctx.note_w or 0.0)
+    hh = 0.5 * (ctx.note_h or 0.0)
+    over = has_note and abs(dx) <= hw + NOTE_MARGIN
+    beside = has_note and abs(dy) <= hh + NOTE_MARGIN
     return np.array(
         [
             1.0,
@@ -63,10 +73,10 @@ def context_vector(ctx: SymbolContext | None) -> np.ndarray:
             max(-1.0, min(1.0, ctx.x_measure * 2.0 - 1.0)),
             max(0.0, min(1.0, ctx.barline / 8.0)),
             1.0 if has_note else 0.0,
-            1.0 if in_column and dy <= -NOTE_SIDE else 0.0,
-            1.0 if in_column and dy >= NOTE_SIDE else 0.0,
-            1.0 if has_note and dx <= -NOTE_SIDE else 0.0,
-            1.0 if has_note and dx >= NOTE_SIDE else 0.0,
+            1.0 if over and dy < -hh else 0.0,
+            1.0 if over and dy > hh else 0.0,
+            1.0 if beside and dx < -hw else 0.0,
+            1.0 if beside and dx > hw else 0.0,
             max(-1.0, min(1.0, dx / NOTE_RANGE)),
             max(-1.0, min(1.0, dy / NOTE_RANGE)),
             max(0.0, min(1.5, ctx.width / 8.0)),
@@ -85,12 +95,15 @@ def context_from_strokes(
     barline: float = NOTE_RANGE,
     note_dx: float | None = None,
     note_dy: float | None = None,
+    note_w: float | None = None,
+    note_h: float | None = None,
 ) -> SymbolContext:
     """Context of an editor drawing: its size from the strokes, its place from the editor.
 
     ``y_staff`` is the strokes' centre in staff spaces from the middle line
-    (down is positive); ``note_dx`` / ``note_dy`` the centre minus the nearest
-    existing notehead, or ``None`` when none is within ``NOTE_RANGE``.
+    (down is positive); ``note_dx`` / ``note_dy`` the centre minus the centre of the
+    nearest existing note's body (``SymbolContext.note_dx``), and ``note_w`` /
+    ``note_h`` that body's size, or ``None`` when no note is within ``NOTE_RANGE``.
     """
     if staff_space <= 0:
         raise ValueError(f"staff_space must be positive, got {staff_space}")
@@ -107,12 +120,16 @@ def context_from_strokes(
         note_dy=note_dy,
         width=(max(xs) - min(xs)) / staff_space,
         height=(max(ys) - min(ys)) / staff_space,
+        note_w=note_w if note_dx is not None else None,
+        note_h=note_h if note_dx is not None else None,
     )
 
 
 def context_from_mapping(raw: Mapping[str, Any]) -> SymbolContext:
-    """Context from a dict with the ``SymbolContext`` field names (``note_dx`` may be null)."""
+    """Context from a dict with the ``SymbolContext`` field names (``note_dx`` may be null,
+    ``note_w`` / ``note_h`` absent)."""
     dx, dy = raw.get("note_dx"), raw.get("note_dy")
+    near = dx is not None and dy is not None
     return SymbolContext(
         y_staff=float(raw["y_staff"]),
         x_measure=float(raw.get("x_measure", 0.5)),
@@ -121,15 +138,16 @@ def context_from_mapping(raw: Mapping[str, Any]) -> SymbolContext:
         note_dy=None if dy is None else float(dy),
         width=float(raw["width"]),
         height=float(raw["height"]),
+        note_w=float(raw.get("note_w") or 0.0) if near else None,
+        note_h=float(raw.get("note_h") or 0.0) if near else None,
     )
 
 
 __all__ = [
     "CONTEXT_DIM",
     "CONTEXT_FEATURES",
-    "NOTE_COLUMN",
+    "NOTE_MARGIN",
     "NOTE_RANGE",
-    "NOTE_SIDE",
     "STAFF_HALF_HEIGHT",
     "SymbolContext",
     "context_from_mapping",

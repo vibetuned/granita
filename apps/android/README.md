@@ -1,7 +1,7 @@
 # granita's Android test shell
 
 A small Kotlin app (plain views, no Compose) that runs the released LiteRT export
-(`models/granitanet/granitanet.tflite`) on a tablet or phone: draw a symbol on a staff
+(`models/battuta/granitanet.tflite`) on a tablet or phone: draw a symbol on a staff
 with the S Pen or a finger and the app shows the top five classes with their
 confidences, the 32 × 32 image the model saw, the model's time, and the context it
 derived from the strokes (height on the staff, place in the measure, size). *Use the
@@ -11,9 +11,10 @@ Every stroke's end classifies all the strokes since the last *Clear*, so a sharp
 take its four strokes.
 
 *Add a note* then a tap on the staff places a notehead (snapped to the lines and
-spaces; *Remove the note* takes it away), so the context's note features are real: the
-symbol's offset from the notehead and whether it sits above, below, left or right of
-it. Two pairs of − / + buttons change the size rule, to calibrate it against
+spaces; *Remove the note* takes it away) with its stem, so the context's note features
+are real: the symbol's offset from the centre of the note's body (notehead and stem, as
+granita measures every note) and whether it sits above, below, left or right of that
+body. Two pairs of − / + buttons change the size rule, to calibrate it against
 natural-size writing: how many staff spaces fill the canvas (granita's 3.0, which these
 buttons calibrated: a symbol's longer side over that many spaces is its fraction of the
 canvas) and the smallest fraction a symbol is drawn at (granita's 0.08: a floor lifts
@@ -43,13 +44,13 @@ export ANDROID_HOME=~/Library/Android/sdk JAVA_HOME=$(/usr/libexec/java_home -v 
 ./gradlew :app:connectedDebugAndroidTest           # the fixture tests, on it
 ```
 
-The model, its sidecar and the fixtures are copied from `models/granitanet` into the
+The model, its sidecar and the fixtures are copied from `models/battuta` into the
 build's assets at build time (`copyGranitaAssets`); nothing is duplicated here. minSdk
 24, as battuta.
 
 ## The tests
 
-`src/androidTest/.../FixtureTest.kt` runs `models/granitanet/fixtures.json` (made by
+`src/androidTest/.../FixtureTest.kt` runs `models/battuta/fixtures.json` (made by
 `scripts/shell_fixtures.py` with the PyTorch checkpoint) through the app, on a device
 or an emulator:
 

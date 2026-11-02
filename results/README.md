@@ -14,8 +14,11 @@ Dataset builds are produced by `musicset symbols` (names below are the output di
 | `symbols.v6-61cls` | 61 | 145,083 / 16,625 / 16,624 | + HOMUS pen strokes (80 / 10 / 10 writers, `w_<split>` writer ids), notes, rests, clefs, time signatures, barline, dot; sections 2 to 6 used the first build of this recipe (139,087 / 15,871 / 15,873), section 7 the one with stemmed-note and time-signature crops |
 | `symbols-brush` | 61 | same splits | HOMUS training strokes rendered as a pressure brush half the time, pen 0.05-0.13 |
 | `symbols-tablet.v6-61cls` | 61 | 0 / 0 / 18,276 | synthetic stylus-only benchmark, `--preset tablet --seed 1` |
-| `symbols` | 51 | 133,742 / 15,609 / 15,546 | time signatures dropped; context v2 (16 features); + EMNIST handwriting for the fingerings and dynamics (1,000 words per class for train + val, 1,822 test words from EMNIST's test writers, source `emnist`) |
-| `symbols-tablet` | 51 | 0 / 0 / 15,280 | synthetic stylus-only benchmark, `--preset tablet --seed 1` |
+| `symbols.v7-51cls` | 51 | 133,742 / 15,609 / 15,546 | time signatures dropped; context v2 (16 features); + EMNIST handwriting for the fingerings and dynamics (1,000 words per class for train + val, 1,822 test words from EMNIST's test writers, source `emnist`) |
+| `symbols-tablet.v7-51cls` | 51 | 0 / 0 / 15,280 | synthetic stylus-only benchmark, `--preset tablet --seed 1` |
+| `symbols-battuta` | 43 | 115,310 / 13,680 / 13,655 | `--profile battuta`: the editor's stylus set; + D.S., D.C., Fine, segno, coda; EMNIST words and signs for 22 classes; HOMUS codas; context v3 (note bodies) |
+| `symbols-battuta-tablet` | 43 | 0 / 0 / 12,862 | stylus-only benchmark for battuta, `--preset tablet --seed 1` |
+| `symbols-kakigori` | 56 | 109,892 / 13,742 / 13,742 | `--profile kakigori`: every class, fonts and score crops only, no stroke templates |
 
 ## 1. Backbone ablation on the 33-class set (`ablation_v2/`)
 
@@ -222,5 +225,88 @@ masked: the context barely matters for them), which makes the fingerings and dyn
 pen for the first time. Weakest classes by pen are still the flag counts (64th 66%, 32nd 68%,
 16th 73%, the 32 px resolution limit) and the 32nd rest (85%).
 
-`granitanet_v7_ctx` is the released model (`models/granitanet/`); the exports in section 8
+`granitanet_v7_ctx` was the released model until section 10; the exports in section 8
 were regenerated from it (LiteRT 1.3e-06, ONNX 2.3e-06, pt2 exact vs. PyTorch).
+
+## 10. Two variants, navigation marks, context from the note body (`battuta_v8_ctx/`, `battuta_v8_noctx/`, `kakigori_v8/`, `context_effect_v8.md`)
+
+Granita is now two models, one per consumer, built from musicset's `--profile` class sets:
+
+- **battuta** (43 classes), the editor's stylus model. Every rest but the quarter is gone
+  (the editor infers a rest's duration from the measure), as are the double accidentals,
+  `dynamicMezzo` and `dynamicZ` (only ever parts of mp, mf, sfz), `pedal`, `note32nd`,
+  `note64th` and `barlineSingle`.
+- **kakigori** (56 classes), the whole catalog for the OMR pipeline, trained on fonts and
+  score crops only, without context (the OMR pipeline computes none yet).
+
+Both gained five navigation marks: D.S., D.C. and Fine (SMuFL glyphs or Verovio's text
+font, `dir` crops whose whole text is the mark, EMNIST letters with drawn periods), segno
+and coda (SMuFL glyphs, `repeatMark` crops). Handwriting for the signs is built from
+EMNIST letters: a coda is an `O` crossed by an `X` turned upright, a segno a capital `S`
+slashed by a `1` with two dots, a turn a capital `S` mirrored and laid on its side (a
+plain `S` on its side matches the inverted turn, IoU 0.58 against 0.39). Every HOMUS writer
+also draws codas from their own whole-note ovals and barlines, so the pen-stroke test
+writers cover the coda too. Lowercase EMNIST letters now keep their x-height and
+descenders inside words, so `mp` no longer reads as `MP`.
+
+The context's note features now measure from the nearest note's **body**, the box of its
+notehead, stem and flag, or of all the noteheads and the stem of its chord, without
+accidentals, dots or articulations. Before, they measured from the nearest notehead, so
+the same staccato read differently on a stem-up and a stem-down note. The above / below /
+left / right flags now test the body's edges. On real crops: augmentation dot right of the
+body 94%, sharp left 93%, arpeggio left 83%, fingering above 89%, staccato above or below
+54 / 45.
+
+| battuta test split, 13,655 samples (10,220 with a known context) | with context | context masked | context-free twin |
+|---|---|---|---|
+| top-1 | **99.30%** | 98.61% | 98.85% |
+| macro F1 | **99.27%** | 98.43% | 98.73% |
+| hand (10 held-out HOMUS writers, 740) | **92.43%** | 90.27% | 90.68% |
+| emnist (EMNIST's test writers, 2,288) | 99.65% | 99.65% | 99.78% |
+| stroke | 99.21% | 96.99% | 99.05% |
+| crop | 99.76% | 98.53% | 99.17% |
+| font | 99.78% | 99.43% | 99.26% |
+| augmentation dot vs. staccato errors | **20** | 87 | 64 |
+| whole note vs. augmentation dot errors | 4 | 16 | 13 |
+| fing1 vs. staccatissimo errors | 4 | 10 | 8 |
+| quarter vs. half note errors | 19 | 18 | 20 |
+| 8th vs. 16th note errors | 20 | 20 | 25 |
+
+| kakigori test split, 13,742 samples (no context) | |
+|---|---|
+| top-1 | 99.57% |
+| macro F1 | 99.59% |
+| font | 99.76% |
+| crop | 98.75% |
+| top confusions | staccato to dot 25, staccatissimo to barline 10, dot to staccato 6 |
+
+The five navigation marks score 99.9-100% F1 in both variants, on every source: fonts,
+crops, EMNIST test writers and the held-out HOMUS writers' codas (60 / 60). D.S. has the
+fewest crops (5 in test, 59 in all).
+
+Read the headline handwriting number with care. Battuta's 92.43% against v7's 86.95%
+(section 9) is mostly the class set. Scored on the 38 classes both share, answering only
+among battuta's classes, the two context models tie:
+
+| 38 shared classes, test | v7 ctx (51 classes) | v8 battuta ctx |
+|---|---|---|
+| top-1 | 99.10% | 99.21% |
+| hand | 92.19% (679) | 91.76% (680) |
+| crop | 99.69% | 99.73% |
+| emnist | 99.26% | 99.60% |
+
+Even that tie is only indicative. **The HOMUS test writers differ between the two builds**
+(v7: 7, 12, 14, 29, 41, 53, 54, 82, 86, 97; v8: 19, 29, 46, 65, 69, 76, 78, 80, 86, 90):
+musicset draws the writer split from a random stream that the steps before it also use,
+so every change upstream reshuffles the writers. Per-writer accuracy spans 80-95%
+(section 5), so hand numbers compare only within one build. Within this build the context
+adds 1.75 points of held-out handwriting (92.43 vs. 90.68) and cuts the dot / staccato
+confusion by two thirds, as before.
+
+On the stylus-only benchmark `symbols-battuta-tablet`, which has no context, the context
+model runs masked and trails its twin: 99.00% vs. 99.27% top-1, 97.09% vs. 98.50% on stroke
+templates. The editor always sends a context, so this only matters for callers that send
+none.
+
+`battuta_v8_ctx` is the released battuta model (`models/battuta/`), `kakigori_v8` the
+kakigori one (`models/kakigori/`).

@@ -3,7 +3,7 @@
 # against granita's reference fixtures. XcodeGen spec (`xcodegen generate`
 # writes GranitaShell.xcodeproj; the project is not tracked), after battuta's.
 #
-# The model and its sidecar are read straight from models/granitanet: Xcode
+# The model and its sidecar are read straight from models/battuta: Xcode
 # compiles the .mlpackage into the app, nothing is copied into apps/.
 name: GranitaShell
 options:
@@ -23,8 +23,8 @@ targets:
     platform: iOS
     sources:
       - path: Sources
-      - path: ../../models/granitanet/granitanet.mlpackage
-      - path: ../../models/granitanet/granitanet.json
+      - path: ../../models/battuta/granitanet.mlpackage
+      - path: ../../models/battuta/granitanet.json
         buildPhase: resources
     info:
       path: Info.plist
@@ -44,7 +44,7 @@ targets:
     platform: iOS
     sources:
       - path: Tests
-      - path: ../../models/granitanet/fixtures.json
+      - path: ../../models/battuta/fixtures.json
         buildPhase: resources
     dependencies:
       - target: GranitaShell

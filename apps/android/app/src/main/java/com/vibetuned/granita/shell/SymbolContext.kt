@@ -16,12 +16,24 @@ class Staff(
     val rightX: Double,
     /** The centre of the notehead drawn on it, if any. */
     val note: PointF? = null,
-)
+) {
+    /**
+     * The body of that note as (left, top, right, bottom): its notehead (1.3 x 1 staff
+     * spaces) and its 3.5-space stem, up on the right from the middle line down, else down
+     * on the left. Granita measures the note offsets from this box's centre.
+     */
+    fun noteBody(): DoubleArray? {
+        val n = note ?: return null
+        val up = n.y >= middleY
+        val top = n.y - (if (up) 3.5 else 0.5) * space
+        return doubleArrayOf(n.x - 0.65 * space, top, n.x + 0.65 * space, top + 4.0 * space)
+    }
+}
 
 /**
  * Where a mark sits in the score, in staff spaces: granita's `SymbolContext` and
- * `context_vector` (granita/context.py), kept identical. The shell draws no notes,
- * so the nearest notehead is always unknown.
+ * `context_vector` (granita/context.py), kept identical. The note is the one the
+ * staff view draws, when there is one, measured by its body (notehead and stem).
  */
 data class SymbolContext(
     /** Centre from the staff's middle line, positive downwards. */
@@ -30,23 +42,29 @@ data class SymbolContext(
     val xMeasure: Double,
     /** Distance to the nearest barline. */
     val barline: Double,
-    /** Centre minus the nearest notehead's centre; null without one. */
+    /** Centre minus the centre of the nearest note's body; null without one. */
     val noteDx: Double?,
     val noteDy: Double?,
     val width: Double,
     val height: Double,
+    /** Width and height of that body; null without one. */
+    val noteW: Double? = null,
+    val noteH: Double? = null,
 ) {
     /**
      * The model's `context` input: sixteen floats roughly in [-1, 1] (granita's
      * `CONTEXT_FEATURES` order): valid, in / above / below the staff, height, measure
-     * position, barline distance, notehead near, symbol above / below / left / right of it,
+     * position, barline distance, note near, symbol above / below / left / right of its body,
      * its offset, width, height.
      */
     fun vector(): FloatArray {
         val hasNote = noteDx != null && noteDy != null
         val dx = noteDx ?: 0.0
         val dy = noteDy ?: 0.0
-        val inColumn = hasNote && abs(dx) < NOTE_COLUMN
+        val hw = 0.5 * (noteW ?: 0.0)
+        val hh = 0.5 * (noteH ?: 0.0)
+        val over = hasNote && abs(dx) <= hw + NOTE_MARGIN
+        val beside = hasNote && abs(dy) <= hh + NOTE_MARGIN
         fun clamp(v: Double, lo: Double, hi: Double) = v.coerceIn(lo, hi).toFloat()
         fun flag(on: Boolean) = if (on) 1f else 0f
         return floatArrayOf(
@@ -58,10 +76,10 @@ data class SymbolContext(
             clamp(xMeasure * 2 - 1, -1.0, 1.0),
             clamp(barline / 8, 0.0, 1.0),
             flag(hasNote),
-            flag(inColumn && dy <= -NOTE_SIDE),
-            flag(inColumn && dy >= NOTE_SIDE),
-            flag(hasNote && dx <= -NOTE_SIDE),
-            flag(hasNote && dx >= NOTE_SIDE),
+            flag(over && dy < -hh),
+            flag(over && dy > hh),
+            flag(beside && dx < -hw),
+            flag(beside && dx > hw),
             clamp(dx / NOTE_RANGE, -1.0, 1.0),
             clamp(dy / NOTE_RANGE, -1.0, 1.0),
             clamp(width / 8, 0.0, 1.5),
@@ -70,32 +88,37 @@ data class SymbolContext(
     }
 
     companion object {
-        /** Staff spaces within which a notehead counts as the symbol's neighbour. */
+        /** Staff spaces within which a note's body counts as the symbol's neighbour. */
         const val NOTE_RANGE = 8.0
         /** Half the staff's height: a centre within this of the middle line is inside the lines. */
         const val STAFF_HALF_HEIGHT = 2.0
-        /** Offset from the notehead's centre from which the symbol counts as beside, above or below it. */
-        const val NOTE_SIDE = 0.5
-        /** |noteDx| below this: the symbol is in the note's column. */
-        const val NOTE_COLUMN = 1.0
+        /**
+         * Staff spaces the symbol may stick out past the body's sides and still count as above
+         * or below it (or past its top and bottom and still count as left or right of it).
+         */
+        const val NOTE_MARGIN = 0.5
         const val DIM = 16
         /** What to send when nothing is known: all zeros, the valid flag included. */
         val UNKNOWN = FloatArray(DIM)
 
         /**
-         * From strokes drawn on a staff: the notehead counts when it is within NOTE_RANGE
+         * From strokes drawn on a staff: the note counts when its body is within NOTE_RANGE
          * staff spaces of the strokes' centre.
          */
         fun fromStrokes(strokes: List<List<PointF>>, staff: Staff): SymbolContext {
             val b = StrokeRaster.bounds(strokes)
             var noteDx: Double? = null
             var noteDy: Double? = null
-            staff.note?.let { n ->
-                val dx = (b.centreX - n.x) / staff.space
-                val dy = (b.centreY - n.y) / staff.space
-                if (hypot(dx, dy) <= NOTE_RANGE) {
-                    noteDx = dx
-                    noteDy = dy
+            var noteW: Double? = null
+            var noteH: Double? = null
+            staff.noteBody()?.let { (left, top, right, bottom) ->
+                val gx = maxOf(left - b.centreX, b.centreX - right, 0.0) / staff.space
+                val gy = maxOf(top - b.centreY, b.centreY - bottom, 0.0) / staff.space
+                if (hypot(gx, gy) <= NOTE_RANGE) {
+                    noteDx = (b.centreX - 0.5 * (left + right)) / staff.space
+                    noteDy = (b.centreY - 0.5 * (top + bottom)) / staff.space
+                    noteW = (right - left) / staff.space
+                    noteH = (bottom - top) / staff.space
                 }
             }
             return SymbolContext(
@@ -106,6 +129,8 @@ data class SymbolContext(
                 noteDy = noteDy,
                 width = (b.maxX - b.minX) / staff.space,
                 height = (b.maxY - b.minY) / staff.space,
+                noteW = noteW,
+                noteH = noteH,
             )
         }
     }

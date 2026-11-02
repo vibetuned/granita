@@ -16,7 +16,7 @@ import kotlin.math.max
 
 /**
  * The LiteRT export and this app's preprocessing against granita's reference
- * (models/granitanet/fixtures.json, from scripts/shell_fixtures.py), on a device or an
+ * (models/battuta/fixtures.json, from scripts/shell_fixtures.py), on a device or an
  * emulator: the model fed the reference pixels gives the reference logits, the context
  * derived from the strokes is the reference vector, and the app's own rasteriser leads
  * the model to the same answer. The numbers go to logcat under the tag "granita".

@@ -6,9 +6,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Final
 
-# Canonical music glyph classes, in musicset's `symbols` catalog order (the first 33 are
-# the original marks, the rest were added with the HOMUS pen-stroke data)
-DEFAULT_CLASSES: Final[tuple[str, ...]] = (
+# Canonical music glyph classes, in musicset's ``symbols`` catalog order. Two variants,
+# one per consumer (musicset ``symbols --profile``):
+#   kakigori: every class, engraved only (fonts and score crops), for the OMR pipeline;
+#   battuta: the stylus set of the Battuta editor, trained with real handwriting.
+KAKIGORI_CLASSES: Final[tuple[str, ...]] = (
     "fing1",
     "fing2",
     "fing3",
@@ -60,7 +62,70 @@ DEFAULT_CLASSES: Final[tuple[str, ...]] = (
     "fClef",
     "cClef",
     "barlineSingle",
+    "dalSegno",
+    "daCapo",
+    "fine",
+    "segno",
+    "coda",
 )
+
+BATTUTA_CLASSES: Final[tuple[str, ...]] = (
+    "fing1",
+    "fing2",
+    "fing3",
+    "fing4",
+    "fing5",
+    "trill",
+    "mordent",
+    "turn",
+    "fermata",
+    "arpeg",
+    "articStaccatoAbove",
+    "articTenutoAbove",
+    "articAccentAbove",
+    "articStaccatissimoAbove",
+    "articMarcatoAbove",
+    "accidentalFlat",
+    "accidentalNatural",
+    "accidentalSharp",
+    "dynamicPiano",
+    "dynamicForte",
+    "dynamicSforzando",
+    "dynamicPP",
+    "dynamicMP",
+    "dynamicMF",
+    "dynamicFF",
+    "dynamicFFF",
+    "dynamicForzando",
+    "dynamicSforzato",
+    "noteWhole",
+    "noteHalf",
+    "noteQuarter",
+    "note8th",
+    "note16th",
+    "augmentationDot",
+    "restQuarter",
+    "gClef",
+    "fClef",
+    "cClef",
+    "dalSegno",
+    "daCapo",
+    "fine",
+    "segno",
+    "coda",
+)
+"""The editor's stylus classes: the catalog without the double accidentals (rare),
+``dynamicMezzo`` and ``dynamicZ`` (only parts of mp / mf / sfz), ``pedal``, ``note32nd`` and
+``note64th``, every rest but the quarter (the editor infers a rest's duration from the
+measure) and ``barlineSingle`` (the editor draws barlines itself)."""
+
+VARIANTS: Final[dict[str, tuple[str, ...]]] = {
+    "battuta": BATTUTA_CLASSES,
+    "kakigori": KAKIGORI_CLASSES,
+}
+
+DEFAULT_CLASSES: Final[tuple[str, ...]] = KAKIGORI_CLASSES
+"""Fallback when a dataset or checkpoint carries no class list: the full catalog."""
 
 CLASS_TO_IDX: Final[dict[str, int]] = {name: i for i, name in enumerate(DEFAULT_CLASSES)}
 IDX_TO_CLASS: Final[dict[int, str]] = {i: name for i, name in enumerate(DEFAULT_CLASSES)}
@@ -117,6 +182,11 @@ CLASS_GROUPS: Final[dict[str, str]] = {
     "fClef": "clef",
     "cClef": "clef",
     "barlineSingle": "barline",
+    "dalSegno": "navigation",
+    "daCapo": "navigation",
+    "fine": "navigation",
+    "segno": "navigation",
+    "coda": "navigation",
 }
 
 DEFAULT_INPUT_SIZE: Final[tuple[int, int]] = (32, 32)
@@ -148,8 +218,9 @@ CONTEXT_DIM: Final[int] = len(CONTEXT_FEATURES)
 # Sample provenance codes written by ``musicset symbols`` as ``s_<split>`` in dataset.npz
 SOURCE_NAMES: Final[tuple[str, ...]] = ("font", "stroke", "crop", "hand", "emnist")
 """``font``: SMuFL glyph render, ``stroke``: stylus stroke template, ``crop``: real score
-crop, ``hand``: real pen strokes (HOMUS writers, never shared between splits), ``emnist``:
-real handwritten digits and letters (EMNIST) composed into fingerings and dynamics."""
+crop, ``hand``: real pen strokes (HOMUS writers, never shared between splits, and codas
+composed from each writer's own strokes), ``emnist``: real handwritten digits and letters
+(EMNIST) composed into fingerings, dynamics, D.S., D.C., Fine, segno, coda and turn."""
 
 
 @dataclass

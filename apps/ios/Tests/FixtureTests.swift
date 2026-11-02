@@ -3,7 +3,7 @@ import XCTest
 @testable import GranitaShell
 
 /// The Core ML export and this app's preprocessing against granita's reference
-/// (`models/granitanet/fixtures.json`, from scripts/shell_fixtures.py): the model fed
+/// (`models/battuta/fixtures.json`, from scripts/shell_fixtures.py): the model fed
 /// the reference pixels gives the reference logits (within fp16), the context derived
 /// from the strokes is the reference vector, and the app's own rasteriser leads the
 /// model to the same answer.

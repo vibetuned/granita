@@ -5,10 +5,10 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
-// The model, its sidecar and the fixtures come straight from models/granitanet,
+// The model, its sidecar and the fixtures come straight from models/battuta,
 // copied into the build's assets at build time: nothing is duplicated in apps/,
 // and the other exports there (PyTorch, ONNX, pt2) stay out of the APK.
-val granitaModels = rootProject.file("../../models/granitanet")
+val granitaModels = rootProject.file("../../models/battuta")
 val copyGranitaAssets by tasks.registering(Copy::class) {
     from(granitaModels) { include("granitanet.tflite", "granitanet.json", "fixtures.json") }
     into(layout.buildDirectory.dir("granita-assets"))

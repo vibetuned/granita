@@ -227,7 +227,8 @@ def parser_infer(p: argparse.ArgumentParser) -> None:
         "--context",
         type=str,
         default=None,
-        help="JSON with y_staff, x_measure, barline, note_dx, note_dy, width, height",
+        help="JSON with y_staff, x_measure, barline, note_dx, note_dy, note_w, note_h, "
+        "width, height",
     )
     p.add_argument("--device", type=str, default="auto")
     p.add_argument("--top-k", type=int, default=5)
