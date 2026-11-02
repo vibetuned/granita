@@ -216,11 +216,13 @@ CONTEXT_FEATURES: Final[tuple[str, ...]] = (
 CONTEXT_DIM: Final[int] = len(CONTEXT_FEATURES)
 
 # Sample provenance codes written by ``musicset symbols`` as ``s_<split>`` in dataset.npz
-SOURCE_NAMES: Final[tuple[str, ...]] = ("font", "stroke", "crop", "hand", "emnist")
+SOURCE_NAMES: Final[tuple[str, ...]] = ("font", "stroke", "crop", "hand", "emnist", "fornes")
 """``font``: SMuFL glyph render, ``stroke``: stylus stroke template, ``crop``: real score
 crop, ``hand``: real pen strokes (HOMUS writers, never shared between splits, and codas
 composed from each writer's own strokes), ``emnist``: real handwritten digits and letters
-(EMNIST) composed into fingerings, dynamics, D.S., D.C., Fine, segno, coda and turn."""
+(EMNIST) composed into fingerings, dynamics, D.S., D.C., Fine, segno, coda and turn,
+``fornes``: scanned handwritten clefs and accidentals (Fornés writers, never shared
+between splits)."""
 
 
 @dataclass

@@ -10,8 +10,8 @@ interim set, from the shell fixtures (``--fixtures``, 13 drawings)::
     uv run python scripts/export_anchors.py --fixtures models/battuta/fixtures.json
 
 From a dataset the anchors lean toward handwriting (``--prefer``, the user's choice,
-2026-11-02): a class's K come from real pen strokes (HOMUS, EMNIST) as far as it has
-them, then from stylus templates, then score crops, then font renders. The note values
+2026-11-02): a class's K come from real handwriting (HOMUS, EMNIST, Fornés) as far as it
+has them, then from stylus templates, then score crops, then font renders. The note values
 get none (``--skip``, the user's choice too): only the trainer's pull toward the original
 weights holds them.
 
@@ -32,7 +32,7 @@ import torch
 from granita.config import CONTEXT_DIM, SOURCE_NAMES
 from granita.infer.predictor import GranitaClassifier
 
-PREFER = "hand+emnist,stroke,crop,font"
+PREFER = "hand+emnist+fornes,stroke,crop,font"
 """Source tiers, best first: a class's anchors fill from the first tier that has samples."""
 NOTE_VALUES = ("noteWhole", "noteHalf", "noteQuarter", "note8th", "note16th")
 

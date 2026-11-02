@@ -18,6 +18,7 @@ Dataset builds are produced by `musicset symbols` (names below are the output di
 | `symbols-tablet.v7-51cls` | 51 | 0 / 0 / 15,280 | synthetic stylus-only benchmark, `--preset tablet --seed 1` |
 | `symbols-battuta` | 43 | 115,310 / 13,680 / 13,655 | `--profile battuta`: the editor's stylus set; + D.S., D.C., Fine, segno, coda; EMNIST words and signs for 22 classes; HOMUS codas; context v3 (note bodies) |
 | `symbols-battuta-tablet` | 43 | 0 / 0 / 12,862 | stylus-only benchmark for battuta, `--preset tablet --seed 1` |
+| `symbols-battuta-fornes` | 43 | 120,417 / 14,176 / 14,198 | `symbols-battuta` + the Fornés scans (`--fornes Music_Symbols.zip --fornes-copies 2`, source `fornes`, writer-disjoint: 17 / 3 / 3 writers); every other sample is `symbols-battuta`'s but for 22 repeated images whose surviving copy carries another context |
 | `symbols-kakigori` | 56 | 109,892 / 13,742 / 13,742 | `--profile kakigori`: every class, fonts and score crops only, no stroke templates |
 
 ## 1. Backbone ablation on the 33-class set (`ablation_v2/`)
@@ -310,3 +311,31 @@ none.
 
 `battuta_v8_ctx` is the released battuta model (`models/battuta/`), `kakigori_v8` the
 kakigori one (`models/kakigori/`).
+
+## 11. Fornés scanned clefs and accidentals (`battuta_v9_fornes_ctx/`)
+
+musicset gained a sixth source, `fornes`: the CVC *Music Symbols* dataset (Fornés,
+Lladós & Sánchez, 2008), 4,094 scans of handwritten flats, naturals, sharps, double
+sharps and treble, bass and alto clefs. Battuta keeps six of the seven classes (no
+double sharp): 6,146 samples, the train scans rendered twice, their strokes thickened
+to a pen (the scans' fine lines faded at 32 px), split by writer with the accidental
+writers and the clef-only writers dealt separately so val and test hold both. The scans
+draw from their own random stream, so this build is v8's plus the scans: same HOMUS test
+writers, same everything else. Same recipe as `battuta_v8_ctx`, the data the only change.
+
+| test split of `symbols-battuta-fornes` | samples | v8 ctx | v9 + Fornés |
+|---|---|---|---|
+| all | 14,198 | 99.11% | 99.30% |
+| fornes (3 held-out writers) | 543 | 93.92% | 99.45% |
+| hand (10 held-out HOMUS writers) | 740 | 92.43% | 92.43% |
+| hand, the six Fornés classes | 240 | 100.00% | 99.58% |
+| font / stroke / crop / emnist | | 99.78 / 99.29 / 99.76 / 99.65% | 99.73 / 99.45 / 99.80 / 99.61% |
+| every class but the six | 11,905 | 99.21% | 99.20% |
+| `symbols-battuta-tablet` (stylus-only, context masked) | 12,862 | 99.00% | 99.01% |
+
+Fornés teaches the model to read old-score handwriting of those six classes (+5.5 points
+on unseen Fornés writers) and changes nothing for the editor: the held-out HOMUS writers'
+clefs and accidentals were already all read right, their errors are notes, rests and
+dots, which Fornés does not have. One run each; the other differences are noise. Not
+released: `models/battuta/` stays `battuta_v8_ctx`.
+
