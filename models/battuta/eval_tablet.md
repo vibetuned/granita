@@ -4,22 +4,22 @@
 
 | Metric         | Value   |
 |----------------|---------|
-| Top-1 Accuracy | 99.00%  |
+| Top-1 Accuracy | 98.98%  |
 | Top-3 Accuracy | 100.00% |
-| Macro F1       | 98.97%  |
-| Weighted F1    | 98.98%  |
+| Macro F1       | 98.96%  |
+| Weighted F1    | 98.96%  |
 
 ## Group Performance
 
 | Group        | Macro F1   |
 |--------------|------------|
-| accidental   | 99.89%     |
-| articulation | 95.15%     |
+| accidental   | 100.00%    |
+| articulation | 95.35%     |
 | clef         | 100.00%    |
 | dynamic      | 100.00%    |
 | fingering    | 99.67%     |
 | navigation   | 100.00%    |
-| note         | 96.99%     |
+| note         | 96.68%     |
 | ornament     | 100.00%    |
 | rest         | 100.00%    |
 
@@ -27,21 +27,19 @@
 
 | Source   |   Samples | Top-1   |
 |----------|-----------|---------|
-| font     |      9805 | 99.59%  |
-| stroke   |      3057 | 97.09%  |
+| font     |      9805 | 99.46%  |
+| stroke   |      3057 | 97.45%  |
 
 ## Top Confusions
 
 | True                    | Predicted               |   Count |
 |-------------------------|-------------------------|---------|
-| articStaccatoAbove      | augmentationDot         |      91 |
-| augmentationDot         | articStaccatoAbove      |      20 |
+| articStaccatoAbove      | augmentationDot         |      81 |
+| augmentationDot         | articStaccatoAbove      |      27 |
+| augmentationDot         | noteWhole               |       7 |
 | articStaccatissimoAbove | fing1                   |       7 |
+| articStaccatoAbove      | noteWhole               |       6 |
 | fing1                   | articStaccatissimoAbove |       3 |
-| augmentationDot         | noteWhole               |       3 |
-| articStaccatoAbove      | noteWhole               |       3 |
-| articStaccatissimoAbove | accidentalNatural       |       1 |
-| articStaccatoAbove      | accidentalNatural       |       1 |
 
 ## Per-Class Breakdown
 
@@ -57,13 +55,13 @@
 | turn                    | ornament     | 100.00%    |
 | fermata                 | ornament     | 100.00%    |
 | arpeg                   | ornament     | 100.00%    |
-| articStaccatoAbove      | articulation | 77.58%     |
+| articStaccatoAbove      | articulation | 78.41%     |
 | articTenutoAbove        | articulation | 100.00%    |
 | articAccentAbove        | articulation | 100.00%    |
-| articStaccatissimoAbove | articulation | 98.15%     |
+| articStaccatissimoAbove | articulation | 98.32%     |
 | articMarcatoAbove       | articulation | 100.00%    |
 | accidentalFlat          | accidental   | 100.00%    |
-| accidentalNatural       | accidental   | 99.67%     |
+| accidentalNatural       | accidental   | 100.00%    |
 | accidentalSharp         | accidental   | 100.00%    |
 | dynamicPiano            | dynamic      | 100.00%    |
 | dynamicForte            | dynamic      | 100.00%    |
@@ -75,12 +73,12 @@
 | dynamicFFF              | dynamic      | 100.00%    |
 | dynamicForzando         | dynamic      | 100.00%    |
 | dynamicSforzato         | dynamic      | 100.00%    |
-| noteWhole               | note         | 99.01%     |
+| noteWhole               | note         | 97.88%     |
 | noteHalf                | note         | 100.00%    |
 | noteQuarter             | note         | 100.00%    |
 | note8th                 | note         | 100.00%    |
 | note16th                | note         | 100.00%    |
-| augmentationDot         | note         | 82.93%     |
+| augmentationDot         | note         | 82.23%     |
 | restQuarter             | rest         | 100.00%    |
 | gClef                   | clef         | 100.00%    |
 | fClef                   | clef         | 100.00%    |
@@ -97,22 +95,22 @@
 
 | Metric         | Value   |
 |----------------|---------|
-| Top-1 Accuracy | 99.00%  |
+| Top-1 Accuracy | 98.98%  |
 | Top-3 Accuracy | 100.00% |
-| Macro F1       | 98.97%  |
-| Weighted F1    | 98.98%  |
+| Macro F1       | 98.96%  |
+| Weighted F1    | 98.96%  |
 
 ## Group Performance
 
 | Group        | Macro F1   |
 |--------------|------------|
-| accidental   | 99.89%     |
-| articulation | 95.15%     |
+| accidental   | 100.00%    |
+| articulation | 95.35%     |
 | clef         | 100.00%    |
 | dynamic      | 100.00%    |
 | fingering    | 99.67%     |
 | navigation   | 100.00%    |
-| note         | 96.99%     |
+| note         | 96.68%     |
 | ornament     | 100.00%    |
 | rest         | 100.00%    |
 
@@ -120,21 +118,19 @@
 
 | Source   |   Samples | Top-1   |
 |----------|-----------|---------|
-| font     |      9805 | 99.59%  |
-| stroke   |      3057 | 97.09%  |
+| font     |      9805 | 99.46%  |
+| stroke   |      3057 | 97.45%  |
 
 ## Top Confusions
 
 | True                    | Predicted               |   Count |
 |-------------------------|-------------------------|---------|
-| articStaccatoAbove      | augmentationDot         |      91 |
-| augmentationDot         | articStaccatoAbove      |      20 |
+| articStaccatoAbove      | augmentationDot         |      81 |
+| augmentationDot         | articStaccatoAbove      |      27 |
+| augmentationDot         | noteWhole               |       7 |
 | articStaccatissimoAbove | fing1                   |       7 |
+| articStaccatoAbove      | noteWhole               |       6 |
 | fing1                   | articStaccatissimoAbove |       3 |
-| augmentationDot         | noteWhole               |       3 |
-| articStaccatoAbove      | noteWhole               |       3 |
-| articStaccatissimoAbove | accidentalNatural       |       1 |
-| articStaccatoAbove      | accidentalNatural       |       1 |
 
 ## Per-Class Breakdown
 
@@ -150,13 +146,13 @@
 | turn                    | ornament     | 100.00%    |
 | fermata                 | ornament     | 100.00%    |
 | arpeg                   | ornament     | 100.00%    |
-| articStaccatoAbove      | articulation | 77.58%     |
+| articStaccatoAbove      | articulation | 78.41%     |
 | articTenutoAbove        | articulation | 100.00%    |
 | articAccentAbove        | articulation | 100.00%    |
-| articStaccatissimoAbove | articulation | 98.15%     |
+| articStaccatissimoAbove | articulation | 98.32%     |
 | articMarcatoAbove       | articulation | 100.00%    |
 | accidentalFlat          | accidental   | 100.00%    |
-| accidentalNatural       | accidental   | 99.67%     |
+| accidentalNatural       | accidental   | 100.00%    |
 | accidentalSharp         | accidental   | 100.00%    |
 | dynamicPiano            | dynamic      | 100.00%    |
 | dynamicForte            | dynamic      | 100.00%    |
@@ -168,12 +164,12 @@
 | dynamicFFF              | dynamic      | 100.00%    |
 | dynamicForzando         | dynamic      | 100.00%    |
 | dynamicSforzato         | dynamic      | 100.00%    |
-| noteWhole               | note         | 99.01%     |
+| noteWhole               | note         | 97.88%     |
 | noteHalf                | note         | 100.00%    |
 | noteQuarter             | note         | 100.00%    |
 | note8th                 | note         | 100.00%    |
 | note16th                | note         | 100.00%    |
-| augmentationDot         | note         | 82.93%     |
+| augmentationDot         | note         | 82.23%     |
 | restQuarter             | rest         | 100.00%    |
 | gClef                   | clef         | 100.00%    |
 | fClef                   | clef         | 100.00%    |

@@ -107,7 +107,8 @@ or an emulator:
 
 - **the rasteriser on real strokes** (skipped without the asset): a replies file with
   Pillow's pixels and PyTorch's answer per drawing — `scripts/replies_fixtures.py` from
-  a `replies.jsonl`, into `src/androidTest/assets/replies_fixtures.json` (untracked) —
+  a `replies.jsonl` (`models/battuta/replies/clean.jsonl --device s-pen` for the Galaxy
+  Tab's), into `src/androidTest/assets/replies_fixtures.json` —
   each drawing rendered here and compared, the numbers logged per drawing. On the first
   70 replies from the Galaxy Tab (2026-11-02, a thousand samples a stroke) every pixel
   matched and every answer agreed.

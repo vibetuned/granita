@@ -3,8 +3,8 @@ diagnostic asset for the shells' rasteriser on real strokes (the fixtures are po
 of a few points; a pen gives a thousand). Rendered at each reply's recorded fraction, with
 its recorded context::
 
-    uv run python scripts/replies_fixtures.py models/battuta/replies/android_replies.jsonl \\
-        --output apps/android/app/src/androidTest/assets/replies_fixtures.json
+    uv run python scripts/replies_fixtures.py models/battuta/replies/clean.jsonl \\
+        --device s-pen --output apps/android/app/src/androidTest/assets/replies_fixtures.json
 
 The Android shell's ``FixtureTest.repliesRasteriser`` reads that asset from the test apk
 (skipped without it) and logs, per drawing, its own pixels against Pillow's and its answer
@@ -31,6 +31,7 @@ def main() -> None:
     parser.add_argument("replies", type=Path, help="a shell's replies.jsonl")
     parser.add_argument("--checkpoint", default="models/battuta/best_model.pt")
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--device", help="only the replies drawn with this device (s-pen, …)")
     args = parser.parse_args()
     clf = GranitaClassifier.from_checkpoint(args.checkpoint, device="cpu")
     rows = [
@@ -38,6 +39,8 @@ def main() -> None:
         for line in args.replies.read_text(encoding="utf-8").splitlines()
         if line.strip()
     ]
+    if args.device:
+        rows = [r for r in rows if r.get("device") == args.device]
     out = []
     for r in rows:
         strokes = [[(p[0], p[1]) for p in s] for s in r["strokes"]]

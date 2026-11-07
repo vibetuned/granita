@@ -19,6 +19,8 @@ Dataset builds are produced by `musicset symbols` (names below are the output di
 | `symbols-battuta` | 43 | 115,310 / 13,680 / 13,655 | `--profile battuta`: the editor's stylus set; + D.S., D.C., Fine, segno, coda; EMNIST words and signs for 22 classes; HOMUS codas; context v3 (note bodies) |
 | `symbols-battuta-tablet` | 43 | 0 / 0 / 12,862 | stylus-only benchmark for battuta, `--preset tablet --seed 1` |
 | `symbols-battuta-fornes` | 43 | 120,417 / 14,176 / 14,198 | `symbols-battuta` + the Fornés scans (`--fornes Music_Symbols.zip --fornes-copies 2`, source `fornes`, writer-disjoint: 17 / 3 / 3 writers); every other sample is `symbols-battuta`'s but for 22 repeated images whose surviving copy carries another context |
+| `symbols-battuta-replies` | 43 | 115,590 / 13,680 / 13,655 | `symbols-battuta` + the 140 cleaned shell replies (`--strokes replies/clean.jsonl --strokes-train`: all in train, rendered twice at the size the shells showed them, source `hand`, writers 1000 / 1001); val and test are `symbols-battuta`'s but for 16 repeated images whose surviving copy carries another context |
+| `symbols-battuta-replies-android`, `-ipad` | 43 | 115,450 / 13,680 / 13,655 | the same with one device's 70 replies, for the cross-device test |
 | `symbols-kakigori` | 56 | 109,892 / 13,742 / 13,742 | `--profile kakigori`: every class, fonts and score crops only, no stroke templates |
 
 ## 1. Backbone ablation on the 33-class set (`ablation_v2/`)
@@ -309,8 +311,8 @@ model runs masked and trails its twin: 99.00% vs. 99.27% top-1, 97.09% vs. 98.50
 templates. The editor always sends a context, so this only matters for callers that send
 none.
 
-`battuta_v8_ctx` is the released battuta model (`models/battuta/`), `kakigori_v8` the
-kakigori one (`models/kakigori/`).
+`battuta_v8_ctx` was the released battuta model (`models/battuta/`) until 2026-11-07
+(section 12), `kakigori_v8` is the kakigori one (`models/kakigori/`).
 
 ## 11. Fornés scanned clefs and accidentals (`battuta_v9_fornes_ctx/`)
 
@@ -338,4 +340,41 @@ on unseen Fornés writers) and changes nothing for the editor: the held-out HOMU
 clefs and accidentals were already all read right, their errors are notes, rests and
 dots, which Fornés does not have. One run each; the other differences are noise. Not
 released: `models/battuta/` stays `battuta_v8_ctx`.
+
+## 12. The shells' replies (`battuta_v10_replies_ctx/`, `battuta_v10_replies_noctx/`, `battuta_v10_android_ctx/`, `battuta_v10_ipad_ctx/`)
+
+140 replies recorded with the test shells on 2026-11-02, one writer per device (70 with an S
+Pen on a Galaxy Tab, 70 with an Apple Pencil on an iPad), cleaned with
+`scripts/replies_viewer.py` (two relabelled, none dropped), mostly note values (58 8th, 26
+quarter, 23 16th, 22 half). They go to train only (`--strokes-train`, off the shared random
+stream, so the HOMUS writers and every other sample stay `symbols-battuta`'s) and train at the
+fraction the shells recorded: musicset's staff-space rule (HOMUS's 8.8 spaces to the canvas)
+would have drawn them at a median 0.33-0.36 of the canvas, where the shells show the model
+0.9 (the 3.0-space editor rule, mostly at its cap). Scored the way the shells feed the model,
+each reply at its recorded fraction with its recorded context:
+
+| model | Galaxy Tab replies (70) | iPad replies (70) |
+|---|---|---|
+| v8 (`battuta_v8_ctx`) | 28.6% | 27.1% |
+| trained with the Galaxy Tab replies | *92.9%* | **90.0%** |
+| trained with the iPad replies | **87.1%** | *95.7%* |
+| trained with both (`battuta_v10_replies_ctx`, released) | *95.7%* | *98.6%* |
+| the same without context | *94.3%* | *98.6%* |
+
+Bold: the other device's replies, never seen in training; italics: replies the model trained
+on. v8's errors were almost all notes (8th read as half or quarter, quarter as half); what is
+left is mostly quarter notes read as half. It is one hand on two devices, so the bold numbers
+measure the editor's input from a known writer, not new writers.
+
+On everything else the release holds (one run each):
+
+| | v8 | v10 |
+|---|---|---|
+| test top-1 (13,655 samples, the same but for 11 repeated images with another context) | 99.30% | 99.27% |
+| hand: 10 held-out HOMUS writers (740) | 92.43% | 91.76% (12 lost, 7 gained; 6 of the lost 16th notes read as 8th) |
+| emnist | 99.65% | 99.74% |
+| context masked / context-free twin | 98.61% / 98.85% | 98.70% / 98.76% |
+| `symbols-battuta-tablet` (stylus-only) | 99.00% | 98.98% |
+
+`battuta_v10_replies_ctx` is the released battuta model (`models/battuta/`) since 2026-11-07.
 

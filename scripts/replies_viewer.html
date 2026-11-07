@@ -1,0 +1,402 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Granita replies</title>
+<style>
+  :root {
+    --bg: #f6f6f4; --card: #ffffff; --text: #1d1d1b; --muted: #6b6b66; --line: #dcdcd6;
+    --ink: #1a3d8f; --staff: #a8a8a0; --note: #8a8a82; --accent: #1a3d8f;
+    --drop: #b3261e; --drop-bg: #fbeceb; --relabel: #9a6700; --relabel-bg: #fff4d6;
+    --focus: #1a3d8f;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #161615; --card: #20201e; --text: #ececea; --muted: #9c9c96; --line: #34342f;
+      --ink: #8fb3ff; --staff: #5c5c56; --note: #77776f; --accent: #8fb3ff;
+      --drop: #ff8a80; --drop-bg: #3a1f1d; --relabel: #f0c560; --relabel-bg: #3a3018;
+      --focus: #8fb3ff;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { position: sticky; top: 0; z-index: 2; background: var(--bg);
+           border-bottom: 1px solid var(--line); padding: 10px 16px; }
+  h1 { font-size: 16px; margin: 0 12px 0 0; display: inline; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+  .row + .row { margin-top: 8px; }
+  .muted { color: var(--muted); }
+  .counts b { font-variant-numeric: tabular-nums; }
+  select, button { font: inherit; color: inherit; background: var(--card);
+                   border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; }
+  button { cursor: pointer; }
+  button.primary { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+  button.primary:disabled { opacity: 0.5; cursor: default; }
+  #status { min-height: 1.4em; }
+  #status.error { color: var(--drop); }
+  main { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+         gap: 12px; padding: 14px 16px 40px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+          padding: 8px; outline: none; }
+  .card:focus-visible, .card.focus { box-shadow: 0 0 0 2px var(--focus); }
+  .card.dropped { background: var(--drop-bg); border-color: var(--drop); }
+  .card.dropped canvas { opacity: 0.35; }
+  canvas { width: 100%; aspect-ratio: 4 / 3; display: block; border-radius: 4px; cursor: pointer; }
+  .meta { display: flex; gap: 6px; margin-top: 6px; }
+  .meta select { flex: 1; min-width: 0; }
+  .meta select.relabelled { background: var(--relabel-bg); color: var(--relabel);
+                            border-color: var(--relabel); }
+  .card.dropped .drop { color: var(--drop); border-color: var(--drop); }
+  .sub { color: var(--muted); font-size: 12px; margin-top: 4px; overflow-wrap: anywhere; }
+  .sub .disagree { color: var(--drop); }
+  .flags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+  .flag { font-size: 11px; border: 1px solid var(--line); border-radius: 10px; padding: 0 7px;
+          color: var(--muted); }
+  .flag.warn { color: var(--relabel); border-color: var(--relabel); }
+  .flag[hidden] { display: none; }
+  #empty { padding: 40px 16px; color: var(--muted); }
+  kbd { font: 12px ui-monospace, monospace; border: 1px solid var(--line); border-radius: 4px;
+        padding: 0 4px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="row">
+    <h1>Granita replies</h1>
+    <span class="counts" id="counts"></span>
+    <span style="flex:1"></span>
+    <button class="primary" id="save" disabled>Save</button>
+  </div>
+  <div class="row">
+    <label>Label <select id="f-label"></select></label>
+    <label>Show <select id="f-status">
+      <option value="all">all</option>
+      <option value="kept">kept</option>
+      <option value="dropped">dropped</option>
+      <option value="relabelled">relabelled</option>
+      <option value="disagrees">model disagrees</option>
+      <option value="flagged">odd label, staff or strokes</option>
+    </select></label>
+    <label>Device <select id="f-device"></select></label>
+    <label>File <select id="f-file"></select></label>
+    <label>Sort <select id="sort">
+      <option value="file">as recorded</option>
+      <option value="label">by label</option>
+      <option value="confidence">least confident first</option>
+    </select></label>
+  </div>
+  <div class="row muted">
+    <span id="status"></span>
+    <span style="flex:1"></span>
+    <span><kbd>←</kbd><kbd>→</kbd> move · <kbd>x</kbd> drop / keep · <kbd>Enter</kbd> relabel ·
+      <kbd>Ctrl</kbd>+<kbd>S</kbd> save</span>
+  </div>
+</header>
+<main id="grid"></main>
+<div id="empty" hidden>No reply matches the filters.</div>
+<script>
+"use strict";
+let data = null;
+const state = new Map();   // id -> {drop, label}: label only when it differs
+const cards = new Map();   // id -> card element
+let visible = [];          // ids in display order
+let focusIndex = -1;
+let dirty = false;
+
+const $ = (sel) => document.querySelector(sel);
+const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const labelOf = (r) => state.get(r.id).label || r.label;
+const disagrees = (r) => !!r.predicted && r.predicted.label !== labelOf(r);
+
+function el(tag, attrs = {}, ...children) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") e.className = v; else if (k === "text") e.textContent = v;
+    else e.setAttribute(k, v);
+  }
+  for (const c of children) e.append(c);
+  return e;
+}
+
+// ---- drawing --------------------------------------------------------------------------
+function frameOf(r) {
+  const sp = (r.staff && r.staff.space) || r.staff_space || 20;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const s of r.strokes) for (const p of s) {
+    if (p[0] < x0) x0 = p[0]; if (p[0] > x1) x1 = p[0];
+    if (p[1] < y0) y0 = p[1]; if (p[1] > y1) y1 = p[1];
+  }
+  if (!isFinite(x0)) {   // nothing drawn: the staff's middle
+    const m = r.staff ? r.staff.middle_y : 0, c = r.staff ? (r.staff.left_x + r.staff.right_x) / 2 : 0;
+    x0 = x1 = c; y0 = y1 = m;
+  }
+  x0 -= 2.5 * sp; x1 += 2.5 * sp; y0 -= 1.5 * sp; y1 += 1.5 * sp;
+  if (r.staff) {   // the staff joins the frame when it is near the drawing
+    const top = r.staff.middle_y - 2.5 * sp, bottom = r.staff.middle_y + 2.5 * sp;
+    if (Math.max(top - y1, y0 - bottom) < 6 * sp) { y0 = Math.min(y0, top); y1 = Math.max(y1, bottom); }
+  }
+  return { x0, y0, x1, y1, sp };
+}
+
+function draw(r, canvas) {
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  if (!w || !h) return;
+  canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
+  const g = canvas.getContext("2d");
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, w, h);
+  const f = frameOf(r);
+  const k = Math.min(w / (f.x1 - f.x0), h / (f.y1 - f.y0));
+  const ox = (w - k * (f.x1 - f.x0)) / 2 - k * f.x0, oy = (h - k * (f.y1 - f.y0)) / 2 - k * f.y0;
+  const X = (x) => ox + k * x, Y = (y) => oy + k * y, sp = f.sp;
+  g.lineCap = "round"; g.lineJoin = "round";
+  if (r.staff) {
+    const s = r.staff;
+    g.strokeStyle = css("--staff"); g.lineWidth = 1;
+    for (let i = -2; i <= 2; i++) {
+      const y = Math.round(Y(s.middle_y + i * sp)) + 0.5;
+      g.beginPath(); g.moveTo(X(s.left_x), y); g.lineTo(X(s.right_x), y); g.stroke();
+    }
+    for (const x of [s.left_x, s.right_x]) {
+      g.beginPath(); g.moveTo(X(x), Y(s.middle_y - 2 * sp)); g.lineTo(X(x), Y(s.middle_y + 2 * sp)); g.stroke();
+    }
+    // the notes as the shells draw them: a 1.3 x 1 head, a 3.5-space stem, up on the
+    // right from the middle line down, else down on the left
+    g.fillStyle = g.strokeStyle = css("--note"); g.lineWidth = Math.max(1, 0.12 * sp * k);
+    for (const [nx, ny] of r.notes) {
+      g.beginPath(); g.ellipse(X(nx), Y(ny), 0.65 * sp * k, 0.5 * sp * k, 0, 0, 2 * Math.PI); g.fill();
+      const up = ny >= s.middle_y, sx = nx + (up ? 0.6 : -0.6) * sp;
+      g.beginPath(); g.moveTo(X(sx), Y(ny)); g.lineTo(X(sx), Y(ny + (up ? -3.5 : 3.5) * sp)); g.stroke();
+    }
+  }
+  g.strokeStyle = g.fillStyle = css("--ink");
+  g.lineWidth = Math.min(4, Math.max(1.5, 0.12 * sp * k));
+  for (const s of r.strokes) {
+    if (!s.length) continue;
+    if (s.length === 1 || s.every((p) => p[0] === s[0][0] && p[1] === s[0][1])) {
+      g.beginPath(); g.arc(X(s[0][0]), Y(s[0][1]), g.lineWidth, 0, 2 * Math.PI); g.fill();
+      continue;
+    }
+    g.beginPath(); g.moveTo(X(s[0][0]), Y(s[0][1]));
+    for (let i = 1; i < s.length; i++) g.lineTo(X(s[i][0]), Y(s[i][1]));
+    g.stroke();
+  }
+}
+
+const observer = new IntersectionObserver((entries) => {
+  for (const e of entries) if (e.isIntersecting && !e.target.dataset.drawn) {
+    e.target.dataset.drawn = "1";
+    draw(data.replies[+e.target.dataset.id], e.target);
+  }
+}, { rootMargin: "300px" });
+
+// ---- cards ----------------------------------------------------------------------------
+function labelSelect(r) {
+  const sel = el("select", { class: "label", title: "label (Enter)" });
+  const known = Object.values(data.groups).flat();
+  if (!known.includes(r.label)) sel.append(el("option", { value: r.label, text: `${r.label} (unknown)` }));
+  for (const [group, names] of Object.entries(data.groups)) {
+    const og = el("optgroup", { label: group });
+    for (const n of names) og.append(el("option", { value: n, text: data.battuta.includes(n) ? n : `${n} ·` }));
+    sel.append(og);
+  }
+  sel.value = labelOf(r);
+  sel.addEventListener("change", () => {
+    const st = state.get(r.id);
+    st.label = sel.value === r.label ? null : sel.value;
+    changed(r);
+  });
+  return sel;
+}
+
+function makeCard(r) {
+  const canvas = el("canvas", { "data-id": String(r.id), title: "drop / keep (x)" });
+  const drop = el("button", { class: "drop", text: "Drop" });
+  const card = el("article", { class: "card", tabindex: "-1", "data-id": String(r.id) },
+    canvas, el("div", { class: "meta" }, labelSelect(r), drop));
+  const p = r.predicted;
+  const sub = el("div", { class: "sub" });
+  if (p) sub.append(el("span", { text: `model: ${p.label} ${Math.round(100 * p.confidence)}%` }), " · ");
+  const when = r.time ? new Date(r.time) : null;
+  sub.append([r.device, when && !isNaN(when) ? when.toLocaleString() : r.time,
+              r.writer ? r.writer.slice(0, 8) : null, `${r.file}:${r.line}`]
+    .filter(Boolean).join(" · "));
+  card.append(sub);
+  const flags = el("div", { class: "flags" }, el("span", { class: "flag disagrees", text: "model disagrees" }));
+  for (const f of r.flags) flags.append(el("span", { class: "flag warn", text: f }));
+  card.append(flags);
+  const toggle = () => { state.get(r.id).drop = !state.get(r.id).drop; changed(r); };
+  canvas.addEventListener("click", () => { focusOn(r.id); toggle(); });
+  drop.addEventListener("click", toggle);
+  card.addEventListener("focusin", () => setFocus(visible.indexOf(r.id)));
+  observer.observe(canvas);
+  return card;
+}
+
+function refreshCard(r) {
+  const card = cards.get(r.id), st = state.get(r.id);
+  card.classList.toggle("dropped", st.drop);
+  card.querySelector(".drop").textContent = st.drop ? "Keep" : "Drop";
+  const sel = card.querySelector("select.label");
+  sel.value = labelOf(r);
+  sel.classList.toggle("relabelled", !!st.label);
+  const model = card.querySelector(".sub span");
+  if (model) model.className = disagrees(r) ? "disagree" : "";
+  card.querySelector(".flag.disagrees").hidden = !disagrees(r);
+}
+
+// ---- filters, counts, focus -----------------------------------------------------------
+function matches(r) {
+  const st = state.get(r.id), lab = $("#f-label").value, show = $("#f-status").value;
+  if (lab !== "*" && labelOf(r) !== lab) return false;
+  if ($("#f-device").value !== "*" && (r.device || "?") !== $("#f-device").value) return false;
+  if ($("#f-file").value !== "*" && r.file !== $("#f-file").value) return false;
+  if (show === "kept") return !st.drop;
+  if (show === "dropped") return st.drop;
+  if (show === "relabelled") return !!st.label;
+  if (show === "disagrees") return disagrees(r);
+  if (show === "flagged") return r.flags.length > 0;
+  return true;
+}
+
+function render() {
+  const order = [...data.replies];
+  const sort = $("#sort").value;
+  if (sort === "label") order.sort((a, b) => labelOf(a).localeCompare(labelOf(b)) || a.id - b.id);
+  if (sort === "confidence") order.sort((a, b) => (a.predicted ? a.predicted.confidence : 2) - (b.predicted ? b.predicted.confidence : 2));
+  const grid = $("#grid");
+  visible = [];
+  for (const r of order) {
+    const card = cards.get(r.id);
+    if (matches(r)) { grid.append(card); card.hidden = false; visible.push(r.id); } else card.hidden = true;
+  }
+  $("#empty").hidden = visible.length > 0;
+  setFocus(Math.min(Math.max(focusIndex, 0), visible.length - 1));
+}
+
+function fillSelect(sel, values, counts) {
+  const keep = sel.value;
+  sel.replaceChildren(el("option", { value: "*", text: "all" }));
+  for (const v of values) sel.append(el("option", { value: v, text: counts ? `${v} (${counts.get(v) || 0})` : v }));
+  sel.value = values.includes(keep) ? keep : "*";
+}
+
+function updateCounts() {
+  let dropped = 0, relabelled = 0;
+  const perLabel = new Map();
+  for (const r of data.replies) {
+    const st = state.get(r.id);
+    if (st.drop) dropped++; else if (st.label) relabelled++;   // as the saved file counts them
+    if (!st.drop) perLabel.set(labelOf(r), (perLabel.get(labelOf(r)) || 0) + 1);
+  }
+  const n = data.replies.length;
+  $("#counts").innerHTML = "";
+  $("#counts").append(`${n} replies · `, el("b", { text: String(n - dropped) }), " kept · ",
+    el("b", { text: String(dropped) }), " dropped · ", el("b", { text: String(relabelled) }), " relabelled");
+  const labels = [...new Set(data.replies.map(labelOf))].sort();
+  fillSelect($("#f-label"), labels, perLabel);
+}
+
+function setFocus(i) {
+  for (const c of document.querySelectorAll(".card.focus")) c.classList.remove("focus");
+  focusIndex = i;
+  if (i >= 0 && i < visible.length) cards.get(visible[i]).classList.add("focus");
+}
+function focusOn(id) { setFocus(visible.indexOf(id)); }
+
+function changed(r) {
+  refreshCard(r);
+  dirty = true;
+  $("#save").disabled = false;
+  status("Unsaved changes.");
+  updateCounts();
+}
+
+function status(text, error = false) {
+  $("#status").textContent = text;
+  $("#status").className = error ? "error" : "";
+}
+
+// ---- save -----------------------------------------------------------------------------
+async function save() {
+  const decisions = {};
+  for (const [id, st] of state) if (st.drop || st.label) decisions[id] = { drop: st.drop, label: st.label };
+  $("#save").disabled = true;
+  try {
+    const res = await fetch("/save", { method: "POST", headers: { "Content-Type": "application/json" },
+                                       body: JSON.stringify({ decisions }) });
+    const out = await res.json();
+    if (!res.ok) throw new Error(out.error || res.statusText);
+    dirty = false;
+    status(`Saved ${out.kept} replies (${out.dropped} dropped, ${out.relabelled} relabelled) to ${out.output}.`);
+  } catch (e) {
+    $("#save").disabled = false;
+    status(`Not saved: ${e.message}`, true);
+  }
+}
+
+// ---- keys -----------------------------------------------------------------------------
+document.addEventListener("keydown", (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === "s") { e.preventDefault(); if (dirty) save(); return; }
+  if (e.target.tagName === "SELECT") {
+    if (e.key === "Escape") e.target.blur();
+    return;
+  }
+  if (!visible.length) return;
+  const cols = Math.max(1, getComputedStyle($("#grid")).gridTemplateColumns.split(" ").length);
+  const move = { ArrowRight: 1, ArrowLeft: -1, ArrowDown: cols, ArrowUp: -cols, j: 1, k: -1 }[e.key];
+  if (move !== undefined) {
+    e.preventDefault();
+    setFocus(Math.min(visible.length - 1, Math.max(0, focusIndex + move)));
+    cards.get(visible[focusIndex]).scrollIntoView({ block: "nearest" });
+    return;
+  }
+  const id = visible[focusIndex];
+  if (id === undefined) return;
+  if (e.key === "x" || e.key === "Delete" || e.key === "Backspace") {
+    e.preventDefault();
+    const st = state.get(id); st.drop = !st.drop; changed(data.replies[id]);
+  } else if (e.key === "Enter") {
+    e.preventDefault();
+    cards.get(id).querySelector("select.label").focus();
+  }
+});
+
+window.addEventListener("beforeunload", (e) => { if (dirty) { e.preventDefault(); e.returnValue = ""; } });
+window.addEventListener("resize", () => {
+  for (const c of document.querySelectorAll("canvas[data-drawn]")) draw(data.replies[+c.dataset.id], c);
+});
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+  for (const c of document.querySelectorAll("canvas[data-drawn]")) draw(data.replies[+c.dataset.id], c);
+});
+
+// ---- start ----------------------------------------------------------------------------
+(async () => {
+  try {
+    data = await (await fetch("/replies")).json();
+  } catch (e) {
+    status(`Could not load the replies: ${e.message}`, true);
+    return;
+  }
+  for (const r of data.replies) {
+    state.set(r.id, { drop: r.drop, label: r.relabel && r.relabel !== r.label ? r.relabel : null });
+    cards.set(r.id, makeCard(r));
+    refreshCard(r);
+  }
+  fillSelect($("#f-device"), [...new Set(data.replies.map((r) => r.device || "?"))].sort());
+  fillSelect($("#f-file"), [...new Set(data.replies.map((r) => r.file))]);
+  for (const id of ["#f-label", "#f-status", "#f-device", "#f-file", "#sort"]) $(id).addEventListener("change", render);
+  $("#save").addEventListener("click", save);
+  updateCounts();
+  render();
+  const notes = [`Saving to ${data.output}.`];
+  if (data.repeats) notes.push(`${data.repeats} repeated replies left out.`);
+  if (data.broken.length) notes.push(`${data.broken.length} unreadable lines (${data.broken.slice(0, 3).map((b) => `${b.file}:${b.line}`).join(", ")}${data.broken.length > 3 ? ", …" : ""}).`);
+  status(notes.join(" "));
+})();
+</script>
+</body>
+</html>

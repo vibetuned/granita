@@ -210,6 +210,23 @@ vector, the model fed and read) and a test that checks them against
 `scripts/shell_fixtures.py` from the PyTorch checkpoint. Each app's README says how to build
 and run it.
 
+Before the replies go into a dataset, clean them by hand with `scripts/replies_viewer.py`.
+It serves a page on 127.0.0.1 with every drawing on its staff, the notes placed on it, its
+label and the model's answer. You drop the scribbles and slips, give a drawing the label it
+should have had, and *Save* writes the kept replies to a new file; the input files are
+never written:
+
+```bash
+uv run python scripts/replies_viewer.py models/battuta/replies/*.jsonl \
+    --output models/battuta/replies/clean.jsonl
+```
+
+Several files are merged and a reply shared twice is kept once. Filters show one label, the
+replies the model disagrees with, the dropped or relabelled ones, one device or file.
+`<output>.review.json` keeps the decisions, so the next session over the same files picks
+up where this one stopped. The page works from the keyboard: arrows to move, `x` to drop or
+keep, `Enter` to relabel, `Ctrl+S` to save.
+
 ## Results
 
 Every run writes its tables next to its weights under `checkpoints/<run>/`; `uv run python scripts/collect_results.py` copies them into [results/](results/) (tracked, weights excluded) and regenerates `results/INDEX.md`. [results/README.md](results/README.md) holds the conclusions: backbone ablation, per-source accuracy with held-out HOMUS writers, the pen-versus-brush sweep, the synthetic-stroke transfer test, the writer learning curve (`scripts/writer_curve.py`) and the effect of the conditioning vector (`scripts/context_effect.py`).
@@ -263,7 +280,10 @@ granita/
 ├── scripts/
 │   ├── collect_results.py      # checkpoints/*/ tables -> results/
 │   ├── context_effect.py       # a context model scored with and without its context
+│   ├── export_anchors.py       # anchors for the shells' on-device trainer
 │   ├── export_mobile.py        # every export format + sidecar, with parity checks
+│   ├── replies_fixtures.py     # Pillow's pixels and PyTorch's answer for a replies file
+│   ├── replies_viewer.py       # page to clean the shells' replies by hand (+ .html)
 │   ├── shell_fixtures.py       # strokes, images and logits for the test shells' checks
 │   ├── stroke_style_sweep.py   # pen vs brush rendering sweep on held-out HOMUS writers
 │   └── writer_curve.py         # held-out accuracy vs number of HOMUS training writers

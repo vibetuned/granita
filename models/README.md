@@ -4,47 +4,60 @@ Weights and exports tracked in git on purpose (`!models/**` in `.gitignore`), so
 another machine has everything the Battuta extension and the OMR pipeline need. Training runs
 stay under `checkpoints/` (ignored); `scripts/export_mobile.py` regenerates every file here and
 `scripts/shell_fixtures.py` the battuta fixtures. Conclusions and the full tables are in
-[`../results/README.md`](../results/README.md), section 10.
+[`../results/README.md`](../results/README.md), sections 10 and 12.
 
 | folder | for | classes | context | training run |
 |---|---|---|---|---|
-| [`battuta/`](battuta/) | the Battuta editor's stylus input | 43 | 16 features | `battuta_v8_ctx` |
+| [`battuta/`](battuta/) | the Battuta editor's stylus input | 43 | 16 features | `battuta_v10_replies_ctx` |
 | [`kakigori/`](kakigori/) | the OMR pipeline's second stage (`GranitaClassifier.predict_box`) | 56 | none | `kakigori_v8` |
 
-Both are granitanet, 2.0 M parameters, trained 2026-11-02 for 15 epochs, batch 256, on
-`musicset symbols --profile <variant> -n 2000` with crops from built musicset score datasets
-capped at 500 per class (`--context-p 0.7`, seed 0).
+Both are granitanet, 2.0 M parameters, trained for 15 epochs, batch 256, on `musicset symbols
+--profile <variant> -n 2000` with crops from built musicset score datasets capped at 500 per
+class (`--context-p 0.7`, seed 0): kakigori on 2026-11-02, battuta on 2026-11-07.
 
-## battuta (training run `battuta_v8_ctx`)
+## battuta (training run `battuta_v10_replies_ctx`)
 
 The editor's stylus set: fingerings, ornaments, articulations, flat / natural / sharp, ten
 dynamics, whole to 16th notes, the augmentation dot, the quarter rest, the three clefs and
 the navigation marks D.S., D.C., Fine, segno and coda. Trained with HOMUS pen strokes (80
 training writers rendered twice, codas composed from each writer's own strokes), EMNIST
 handwriting at 1,000 words or signs per class, stylus stroke templates and context dropout
-0.25.
+0.25, and since 2026-11-07 the 140 replies recorded with the test shells
+([`replies/clean.jsonl`](replies/clean.jsonl): 70 drawn with an S Pen on a Galaxy Tab, 70
+with an Apple Pencil, cleaned with `scripts/replies_viewer.py`), all in train, rendered twice
+at the size the shells showed them to the model (`musicset symbols --strokes
+replies/clean.jsonl --strokes-train`). Everything else is the previous release's
+(`battuta_v8_ctx`) build and recipe.
 
-| test split (13,655 samples) | with context | context masked |
-|---|---|---|
-| top-1 | 99.30% | 98.61% |
-| held-out handwriting (10 HOMUS writers never seen in training) | 92.43% | 90.27% |
-| EMNIST handwriting (EMNIST's test writers) | 99.65% | 99.65% |
-| augmentation dot vs. staccato errors | 20 | 87 |
-| fing1 vs. staccatissimo errors | 4 | 10 |
+| test split (13,655 samples, the previous release's) | v10 | context masked | v8 |
+|---|---|---|---|
+| top-1 | 99.27% | 98.70% | 99.30% |
+| held-out handwriting (10 HOMUS writers never seen in training) | 91.76% | 89.86% | 92.43% |
+| EMNIST handwriting (EMNIST's test writers) | 99.74% | 99.61% | 99.65% |
+| stylus-only benchmark (`symbols-battuta-tablet`, context masked) | 98.98% | | 99.00% |
+| augmentation dot vs. staccato errors | 23 | 78 | 20 |
+| fing1 vs. staccatissimo errors | 2 | 6 | 4 |
 
-The handwriting number is not comparable with the previous 51-class release: on the classes
-both share they tie, and the test writers differ between the two builds (results, section 10).
+The replies are what the release is for. Read the way the shells feed the model (each drawing
+at its recorded fraction, with its recorded context), v8 got 28% of them right: mostly notes,
+8th notes read as half or quarter notes. A model trained with one device's replies reads the
+other device's at 87-90% (Galaxy Tab replies 87.1%, iPad replies 90.0%, against v8's 28.6% and
+27.1%). This release, trained on both, reads them at 96-99%, but it has seen them all. The
+other tablet's replies are the same hand, so
+this measures the editor's own input, not new writers. On the HOMUS writers it loses 12
+drawings and gains 7 (six of the losses 16th notes read as 8th), within what one run can tell.
 
 | file | what it is | checked against PyTorch |
 |---|---|---|
-| `granitanet.mlpackage/` | Core ML program, fp16 weights (3.9 MB), **two functions** since 2026-11-02: `infer` (the default: `input`, `context` → `logits`, as before) and `personal` (`input`, `context`, `head_w`, `head_b` → `logits`, `features`), which makes it iOS 18+ | on this Mac: max abs. diff 1.3e-02 on both functions (CPU); the `apps/ios` tests on a device: the previous release 3.6e-02 to 4.5e-02 on the simulator, the same top-1 on every fixture |
-| `granitanet.tflite` | LiteRT / TFLite, static batch 1 (7.7 MB), two signatures since 2026-11-02 (`scripts/export_mobile.py --formats litert`): `serving_default` (`args_0`, `args_1` → `output_0`, as before) and `personal` (`args_0`, `args_1`, `head_w` as `args_2`, `head_b` as `args_3` → logits `output_0`, features `output_1`), the weights shared | max abs. diff 3.0e-06 on both signatures; on the 13 fixtures 1.5e-05, the same top-1; re-run the `apps/android` tests on a device |
-| `granitanet.onnx` | ONNX opset 18, dynamic batch (7.8 MB) | max abs. diff 1.4e-06 |
+| `granitanet.mlpackage/` | Core ML program, fp16 weights (3.9 MB), **two functions** since 2026-11-02: `infer` (the default: `input`, `context` → `logits`, as before) and `personal` (`input`, `context`, `head_w`, `head_b` → `logits`, `features`), which makes it iOS 18+ | exported on Linux for v10 (the same program as the Mac's but for internal names, the weights byte-identical for the same checkpoint), so not run yet: **check on the Mac** (`scripts/export_mobile.py --formats coreml` reports the parity there) and run the `apps/ios` tests. v8 on the Mac: max abs. diff 1.3e-02 on both functions (CPU), 3.6e-02 to 4.5e-02 on the simulator, the same top-1 on every fixture |
+| `granitanet.tflite` | LiteRT / TFLite, static batch 1 (7.7 MB), two signatures since 2026-11-02 (`scripts/export_mobile.py --formats litert`): `serving_default` (`args_0`, `args_1` → `output_0`, as before) and `personal` (`args_0`, `args_1`, `head_w` as `args_2`, `head_b` as `args_3` → logits `output_0`, features `output_1`), the weights shared | max abs. diff 2.4e-06 on both signatures; re-run the `apps/android` tests on a device |
+| `granitanet.onnx` | ONNX opset 18, dynamic batch (7.8 MB) | max abs. diff 1.6e-06 |
 | `granitanet.pt2` | `torch.export` program, dynamic batch (7.9 MB) | exact |
 | `granitanet.json` | sidecar: class list, groups, input and output spec, stroke rasterisation rules, context features and the note-body definition, the tflite's tensor names per signature, and `head`: the last layer's weights `(43 × 128)` and bias, what an app's `personal` copy starts from | |
-| `anchors.json` | feature vectors the model read with its own logits, `label` an index into `classes` (`scripts/export_anchors.py`): what the shells' on-device trainer holds the retrained layer to. 152 anchors: 4 per class from the battuta build's val split among the samples the model gets right (`--data`, seed 0), handwriting first (`--prefer`): HOMUS pen strokes or EMNIST words where a class has them (83 EMNIST, 33 HOMUS), stylus templates for the ornaments and articulations, which have no real handwriting (36). The five note values get none (`--skip`): only the trainer's L2 pull holds them | |
-| `fixtures.json` | 13 stroke sets on a staff, six beside a note, with the note's body, their context, rendered image and logits (`scripts/shell_fixtures.py`), for the mobile test shells in `apps/`. The `barline` and `half rest` fixtures now read as `fing1` and `articTenutoAbove`: battuta has neither class, and the fixtures pin numbers, not accuracy | |
+| `anchors.json` | feature vectors the model read with its own logits, `label` an index into `classes` (`scripts/export_anchors.py`): what the shells' on-device trainer holds the retrained layer to. 152 anchors: 4 per class from the battuta build's val split among the samples the model gets right (`--data`, seed 0; the replies are all in train), handwriting first (`--prefer`): HOMUS pen strokes or EMNIST words where a class has them (82 EMNIST, 34 HOMUS), stylus templates for the ornaments and articulations, which have no real handwriting (36). The five note values get none (`--skip`): only the trainer's L2 pull holds them | |
+| `fixtures.json` | 13 stroke sets on a staff, six beside a note, with the note's body, their context, rendered image and logits (`scripts/shell_fixtures.py`), for the mobile test shells in `apps/`. The `barline` and `half rest` fixtures read as `fing1` and `articTenutoAbove`: battuta has neither class, and the fixtures pin numbers, not accuracy. v10 gives every fixture v8's answer | |
 | `best_model.pt` | PyTorch checkpoint (weights only) for `GranitaClassifier.from_checkpoint` and re-export | |
+| `replies/clean.jsonl` | the shells' replies the release was trained on, cleaned by hand (two relabelled, none dropped); musicset's contribution format plus the staff, notes, fraction and the device's answer | |
 | `history.json`, `eval_test.md`, `eval_tablet.md`, `context_effect.md` | training curve, test tables, the stylus-only benchmark | |
 
 ### Feeding the model from the editor
